@@ -9,9 +9,17 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { StateGraph } from "@langchain/langgraph";
 import { MemorySaver, Annotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
+import { Account, RpcProvider } from "starknet";
+
+// Initialize Starknet provider
+const provider = new RpcProvider({ 
+  nodeUrl: "https://starknet-sepolia.public.blastapi.io"
+});
+
+// ETH token address on Starknet Sepolia
+const ETH_TOKEN_ADDRESS = "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
 
 // Define the graph state
-// See here for more info: https://langchain-ai.github.io/langgraphjs/how-tos/define-state/
 const StateAnnotation = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
     reducer: (x, y) => x.concat(y),
@@ -20,21 +28,66 @@ const StateAnnotation = Annotation.Root({
 
 // Define the tools for the agent to use
 const weatherTool = tool(async ({ query }) => {
-  // This is a placeholder for the actual implementation
   if (query.toLowerCase().includes("sf") || query.toLowerCase().includes("san francisco")) {
     return "It's 60 degrees and foggy."
   }
   return "It's 90 degrees and sunny."
 }, {
   name: "weather",
-  description:
-    "Call to get the current weather for a location.",
+  description: "Call to get the current weather for a location.",
   schema: z.object({
     query: z.string().describe("The query to use in your search."),
   }),
 });
 
-const tools = [weatherTool];
+const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
+  try {
+    // Get confirmation before proceeding
+    const confirmation = await new Promise<string>((resolve) => {
+      rl.question(`Do you want to send ${amountInEth} ETH to ${recipientAddress} on Sepolia? (yes/no): `, resolve);
+    });
+
+    if (confirmation.toLowerCase() !== 'yes') {
+      return "Transaction cancelled by user.";
+    }
+
+    const accountAddress = process.env.STARKNET_ACCOUNT_ADDRESS;
+    const privateKey = process.env.STARKNET_PRIVATE_KEY;
+
+    if (!accountAddress || !privateKey) {
+      return "Error: Missing account credentials in environment variables";
+    }
+
+    const account = new Account(provider, accountAddress, privateKey);
+    
+    // Convert ETH to wei (ETH * 10^18)
+    const amountInWei = (BigInt(Math.floor(parseFloat(amountInEth) * 1e18))).toString();
+    
+    // ETH transfer call
+    const result = await account.execute({
+      contractAddress: ETH_TOKEN_ADDRESS,
+      entrypoint: 'transfer',
+      calldata: [recipientAddress, amountInWei, '0'],
+    });
+
+    return `Transaction submitted to Sepolia. Hash: ${result.transaction_hash}
+            View on Starkscan: https://sepolia.starkscan.co/tx/${result.transaction_hash}`;
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      return `Error sending ETH: ${error.message}`;
+    }
+    return `Error sending ETH: Unknown error occurred`;
+  }
+}, {
+  name: "send_eth",
+  description: "Send ETH to an address on Starknet Sepolia testnet",
+  schema: z.object({
+    recipientAddress: z.string().describe("The recipient's Starknet address"),
+    amountInEth: z.string().describe("The amount of ETH to send"),
+  }),
+});
+
+const tools = [weatherTool, sendEthTool];
 const toolNode = new ToolNode(tools);
 
 const model = new ChatAnthropic({
@@ -42,30 +95,22 @@ const model = new ChatAnthropic({
   temperature: 0,
 }).bindTools(tools);
 
-// Define the function that determines whether to continue or not
-// We can extract the state typing via `StateAnnotation.State`
 function shouldContinue(state: typeof StateAnnotation.State) {
   const messages = state.messages;
   const lastMessage = messages[messages.length - 1] as AIMessage;
 
-  // If the LLM makes a tool call, then we route to the "tools" node
   if (lastMessage.tool_calls?.length) {
     return "tools";
   }
-  // Otherwise, we stop (reply to the user)
   return "__end__";
 }
 
-// Define the function that calls the model
 async function callModel(state: typeof StateAnnotation.State) {
   const messages = state.messages;
   const response = await model.invoke(messages);
-
-  // We return a list, because this will get added to the existing list
   return { messages: [response] };
 }
 
-// Define a new graph
 const workflow = new StateGraph(StateAnnotation)
   .addNode("agent", callModel)
   .addNode("tools", toolNode)
@@ -73,15 +118,9 @@ const workflow = new StateGraph(StateAnnotation)
   .addConditionalEdges("agent", shouldContinue)
   .addEdge("tools", "agent");
 
-// Initialize memory to persist state between graph runs
 const checkpointer = new MemorySaver();
-
-// Finally, we compile it!
-// This compiles it into a LangChain Runnable.
-// Note that we're (optionally) passing the memory when compiling the graph
 const app = workflow.compile({ checkpointer });
 
-// Create readline interface
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout
@@ -90,7 +129,7 @@ const rl = readline.createInterface({
 async function askQuestion() {
   while (true) {
     const question = await new Promise<string>((resolve) => {
-      rl.question('Ask about the weather (or type "exit" to quit): ', resolve);
+      rl.question('Ask a question (or type "exit" to quit): ', resolve);
     });
 
     if (question.toLowerCase() === 'exit') {
@@ -108,5 +147,4 @@ async function askQuestion() {
   }
 }
 
-// Start the interactive session
 askQuestion();
