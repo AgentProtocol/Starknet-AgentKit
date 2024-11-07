@@ -5,7 +5,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "NODE_OPTIONS='--loader ts-node/esm' node agent_langchain.ts",
+    "start": "NODE_OPTIONS='--loader ts-node/esm --no-warnings' node agent_langchain.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "devDependencies": {
