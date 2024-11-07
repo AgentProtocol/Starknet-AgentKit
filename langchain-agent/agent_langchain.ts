@@ -8,17 +8,18 @@ import { StateGraph } from "@langchain/langgraph";
 import { MemorySaver, Annotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { Account, RpcProvider } from "starknet";
-import { STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from './constants.js';
-import { generateKeyPair, deployAccount } from './util/wallet.js';
+import { RPC_URL, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from './constants.js';
+import { generateAccount, deployAccount } from './util/wallet.js';
 
-/*
-  -//! wallet creation function missing
-  -//! request funds from faucet function missing
- */
+// Starknet account address and private key
+//can be overwritten by the agent if environment variables are not set
+// NOTICE: the created account will not persist between runs
+let privateKey: string | undefined = STARKNET_PRIVATE_KEY;
+let accountAddress: string | undefined = STARKNET_ACCOUNT_ADDRESS;
 
 // Alchemy Starknet RPC
 const provider = new RpcProvider({ 
-  nodeUrl: "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_7/UiB8n0FBudlTFaqo7pwvNci7e8JzZS9P"
+  nodeUrl: RPC_URL
 });
 
 // ETH token address on Starknet Sepolia
@@ -46,28 +47,36 @@ const weatherTool = tool(async ({ query }) => {
   }),
 });
 
+// Get a starknet account or generate a new one
 const getAccount = async () => {
-  // Starknet account address and private key can be overwritten by the agent if environment variables are not set
-  // NOTICE: the created account will not persist between runs
-  if (STARKNET_ACCOUNT_ADDRESS && STARKNET_PRIVATE_KEY) {
-    return new Account(provider, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY);
+  if (accountAddress && privateKey) {
+    return new Account(provider, accountAddress, privateKey);
   }
 
   const creationConfirmation = await new Promise<string>((resolve) => {
     rl.question(`To execute onchain transactions we need a funded account. Do you want to deploy a new account? (yes/no): `, resolve);
   })
+
   if (creationConfirmation.toLowerCase() !== 'yes') {
     return;
   }
-  const { privateKey: newPrivateKey, starkKeyPub, OZcontractAddress } = await generateKeyPair();
+
+  const { privateKey: newPrivateKey, starkKeyPub, OZcontractAddress } = await generateAccount();
+
   const fundingConfirmation = await new Promise<string>((resolve) => {
     rl.question(`Alright, here is the new account address: ${OZcontractAddress}. Please send some funds to it using the faucet: https://starknet-faucet.vercel.app . Let me know when you're done (yes/no): `, resolve);
   })
+
   if (fundingConfirmation.toLowerCase() !== 'yes') {
     return;
   }
+
   await deployAccount(newPrivateKey, starkKeyPub, OZcontractAddress);
-  return new Account(provider, OZcontractAddress, newPrivateKey);
+
+  privateKey = newPrivateKey;
+  accountAddress = OZcontractAddress;
+
+  return new Account(provider, accountAddress, privateKey);
 }
 
 const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {

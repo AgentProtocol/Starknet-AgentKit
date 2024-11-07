@@ -5,19 +5,25 @@ const provider = new RpcProvider({ nodeUrl: `${RPC_URL}` });
 
 const OZaccountClassHash = '0x061dac032f228abef9c6626f995015233097ae253a7f72d68552db02f2971b8f';
 
-export const generateKeyPair = () => {
+export const generateAccount = () => {
   // new Open Zeppelin account v0.8.1
   // Generate public and private key pair.
   const privateKey = stark.randomAddress();
   const starkKeyPub = ec.starkCurve.getStarkKey(privateKey);
 
   const OZaccountConstructorCallData = CallData.compile({ publicKey: starkKeyPub });
-  const OZcontractAddress = hash.calculateContractAddressFromHash(
+  let OZcontractAddress = hash.calculateContractAddressFromHash(
     starkKeyPub,
     OZaccountClassHash,
     OZaccountConstructorCallData,
     0
   );
+
+  // Ensure address is 66 characters long by padding with zeros after 0x if needed
+  if (OZcontractAddress.length < 66) {
+    OZcontractAddress = OZcontractAddress.slice(0, 2) + '0'.repeat(66 - OZcontractAddress.length) + OZcontractAddress.slice(2);
+  }
+  
   return { privateKey, starkKeyPub, OZcontractAddress };
 }
 
