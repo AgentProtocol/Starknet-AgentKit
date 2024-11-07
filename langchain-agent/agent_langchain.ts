@@ -1,6 +1,6 @@
 import * as dotenv from 'dotenv';
 import * as readline from 'readline';
-dotenv.config();
+dotenv.config({ path: '../.env' });
 
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { tool } from "@langchain/core/tools";
@@ -11,9 +11,14 @@ import { MemorySaver, Annotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { Account, RpcProvider } from "starknet";
 
-// Initialize Starknet provider
+/*
+  -//! wallet creation function missing
+  -//! request funds from faucet function missing
+ */
+
+// Alchemy Starknet RPC
 const provider = new RpcProvider({ 
-  nodeUrl: "https://starknet-sepolia.public.blastapi.io"
+  nodeUrl: "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_7/UiB8n0FBudlTFaqo7pwvNci7e8JzZS9P"
 });
 
 // ETH token address on Starknet Sepolia
