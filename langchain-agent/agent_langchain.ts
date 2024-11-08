@@ -25,7 +25,7 @@ const provider = new RpcProvider({
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
-import { checkBalanceTool, provider as balanceProvider } from './check_balance';
+import { checkBalanceTool } from './check_balance.js';
 
 // run cairo-compile whenever deployTokenTool is called
 const execAsync = promisify(exec);
