@@ -14,6 +14,7 @@
     "typescript": "^5.6.3"
   },
   "dependencies": {
+    "@avnu/avnu-sdk": "^2.1.1",
     "@langchain/anthropic": "^0.3.7",
     "@langchain/core": "^0.3.17",
     "@langchain/langgraph": "^0.2.20",

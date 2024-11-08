@@ -10,6 +10,9 @@ import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { Account, RpcProvider } from "starknet";
 import { RPC_URL, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from './constants.js';
 import { generateAccount, deployAccount } from './util/wallet.js';
+import { executeSwap, getQuote, type ExecuteSwapOptions, type Quote } from './swap.js';
+import { ETH_ADDRESS, STRK_ADDRESS } from './swap.js';
+import { formatUnits } from "ethers";
 
 // Starknet account address and private key
 //can be overwritten by the agent if environment variables are not set
@@ -139,8 +142,53 @@ const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
   }),
 });
 
+// Add this new tool definition after your existing tools
+const swapTool = tool(async ({ tokenInAddress, tokenOutAddress, amountIn }) => {
+  try {
+    // Normalize token addresses
+    const normalizedTokenIn = tokenInAddress.toLowerCase() === 'eth' ? ETH_ADDRESS : tokenInAddress;
+    const normalizedTokenOut = tokenOutAddress.toLowerCase() === 'strk' ? STRK_ADDRESS : tokenOutAddress;
+
+    const account = await getAccount();
+    if (!account) {
+      return "Transaction cancelled by user.";
+    }
+
+    const quote = await getQuote(normalizedTokenIn, normalizedTokenOut, amountIn);
+    
+    const confirmation = await new Promise<string>((resolve) => {
+      rl.question(`Do you want to swap ${amountIn} tokens from ${tokenInAddress} to ${tokenOutAddress}? Expected output: ${formatUnits(quote.buyAmount, 18)} (yes/no): `, resolve);
+    });
+
+    if (confirmation.toLowerCase() !== 'yes') {
+      return "Transaction cancelled by user.";
+    }
+
+    const result = await executeSwap(account, quote, {
+      executeApprove: true,
+      slippage: 0.005
+    });
+
+    return `Swap transaction submitted. Hash: ${result.transactionHash}
+            View on Starkscan: https://sepolia.starkscan.co/tx/${result.transactionHash}`;
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      return `Error executing swap: ${error.message}`;
+    }
+    return `Error executing swap: Unknown error occurred`;
+  }
+}, {
+  name: "swap_tokens",
+  description: "Swap tokens on Starknet using Avnu aggregator",
+  schema: z.object({
+    tokenInAddress: z.string().describe("The address of the token to swap from"),
+    tokenOutAddress: z.string().describe("The address of the token to swap to"),
+    amountIn: z.string().describe("The amount of tokens to swap"),
+  }),
+});
+
 // Declare tools once and include all tools
-const tools = [weatherTool, sendEthTool, checkBalanceTool];
+const tools = [weatherTool, sendEthTool, checkBalanceTool, swapTool];
 const toolNode = new ToolNode(tools);
 
 const model = new ChatAnthropic({
