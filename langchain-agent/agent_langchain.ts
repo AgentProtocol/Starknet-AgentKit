@@ -118,7 +118,6 @@ interface SwapInput {
 const swapTool = tool(
   async (input: { tokenInAddress: string; tokenOutAddress: string; amountIn: string }) => {
     try {
-      // Normalize token addresses
       const normalizedTokenIn = input.tokenInAddress.toLowerCase() === 'eth' 
         ? ETH_ADDRESS 
         : input.tokenInAddress.toLowerCase() === 'strk'
@@ -137,25 +136,14 @@ const swapTool = tool(
       }
 
       const quote = await getQuote(normalizedTokenIn, normalizedTokenOut, input.amountIn);
+      const expectedOutput = formatUnits(quote.buyAmount, 18);
       
-      const confirmation = await new Promise<string>((resolve) => {
-        rl.question(
-          `Do you want to swap ${input.amountIn} tokens from ${input.tokenInAddress} to ${input.tokenOutAddress}? ` +
-          `Expected output: ${formatUnits(quote.buyAmount, 18)} (yes/no): `,
-          resolve
-        );
-      });
-
-      if (confirmation.toLowerCase() !== 'yes') {
-        return "Transaction cancelled by user.";
-      }
-
       const result = await executeSwap(account, quote, {
         executeApprove: true,
         slippage: 0.01
       });
 
-      return `Swap executed successfully! Transaction hash: ${result.transactionHash}`;
+      return `✅ Swap executed successfully! You will receive ${expectedOutput} ${input.tokenOutAddress.toUpperCase()}. Transaction hash: ${result.transactionHash}`;
     } catch (error) {
       console.error("Error in swap:", error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
