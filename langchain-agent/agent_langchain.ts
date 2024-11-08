@@ -1,6 +1,4 @@
-import * as dotenv from 'dotenv';
 import * as readline from 'readline';
-dotenv.config({ path: '../.env' });
 
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { tool } from "@langchain/core/tools";
@@ -10,6 +8,19 @@ import { StateGraph } from "@langchain/langgraph";
 import { MemorySaver, Annotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { Account, RpcProvider } from "starknet";
+import { RPC_URL, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from './constants.js';
+import { generateAccount, deployAccount } from './util/wallet.js';
+
+// Starknet account address and private key
+//can be overwritten by the agent if environment variables are not set
+// NOTICE: the created account will not persist between runs
+let privateKey: string | undefined = STARKNET_PRIVATE_KEY;
+let accountAddress: string | undefined = STARKNET_ACCOUNT_ADDRESS;
+
+// Alchemy Starknet RPC
+const provider = new RpcProvider({ 
+  nodeUrl: RPC_URL
+});
 // child process to run the Cairo compiler command
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -21,6 +32,7 @@ const execAsync = promisify(exec);
 
 // ETH token address on Starknet Sepolia
 const ETH_TOKEN_ADDRESS = "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
+
 
 // Define the graph state
 const StateAnnotation = Annotation.Root({
@@ -43,8 +55,47 @@ const weatherTool = tool(async ({ query }) => {
   }),
 });
 
+// Get a starknet account or generate a new one
+const getAccount = async () => {
+  if (accountAddress && privateKey) {
+    return new Account(provider, accountAddress, privateKey);
+  }
+
+  const creationConfirmation = await new Promise<string>((resolve) => {
+    rl.question(`To execute onchain transactions we need a funded account. Do you want to deploy a new account? (yes/no): `, resolve);
+  })
+
+  if (creationConfirmation.toLowerCase() !== 'yes') {
+    return;
+  }
+
+  const { privateKey: newPrivateKey, starkKeyPub, OZcontractAddress } = await generateAccount();
+
+  const fundingConfirmation = await new Promise<string>((resolve) => {
+    rl.question(`Alright, here is the new account address: ${OZcontractAddress}. Please send some funds to it using the faucet: https://starknet-faucet.vercel.app . Let me know when you're done (yes/no): `, resolve);
+  })
+
+  if (fundingConfirmation.toLowerCase() !== 'yes') {
+    return;
+  }
+
+  await deployAccount(newPrivateKey, starkKeyPub, OZcontractAddress);
+
+  privateKey = newPrivateKey;
+  accountAddress = OZcontractAddress;
+
+  return new Account(provider, accountAddress, privateKey);
+}
+
 const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
   try {
+
+    const account = await getAccount();
+
+    if (!account) {
+      return "Transaction cancelled by user.";
+    }
+
     // Get confirmation before proceeding
     const confirmation = await new Promise<string>((resolve) => {
       rl.question(`Do you want to send ${amountInEth} ETH to ${recipientAddress} on Sepolia? (yes/no): `, resolve);
@@ -60,12 +111,10 @@ const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
     if (!accountAddress || !privateKey) {
       return "Error: Missing account credentials in environment variables";
     }
-
-    const account = new Account(balanceProvider, accountAddress, privateKey);
     
     // Convert ETH to wei (ETH * 10^18)
     const amountInWei = (BigInt(Math.floor(parseFloat(amountInEth) * 1e18))).toString();
-    
+
     // ETH transfer call
     const result = await account.execute({
       contractAddress: ETH_TOKEN_ADDRESS,
