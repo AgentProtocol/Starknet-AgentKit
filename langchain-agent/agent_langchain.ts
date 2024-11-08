@@ -6,13 +6,13 @@ import { z } from "zod";
 import { StateGraph } from "@langchain/langgraph";
 import { MemorySaver, Annotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
-import { Account, RpcProvider } from "starknet";
+import { RpcProvider } from "starknet";
 import { RPC_URL, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from './constants.js';
 import { generateAccount, deployAccount, getAccount } from './util/wallet.js';
 import { checkBalanceTool } from './check_balance.js';
 import { getNews } from './util/news.js';
 import { ChatOpenAI } from '@langchain/openai';
-import { readFromStorage, saveToStorage } from './util/storage.js';
+import { saveToStorage } from './util/storage.js';
 
 // // Starknet account address and private key
 // // can be overwritten by the agent if environment variables are not set
@@ -109,8 +109,12 @@ const getCurrentAccountTool = tool(async () => {
 // Prompts user to fund account via faucet before deployment.
 // Deploys account contract if funding confirmed.
 // Saves credentials to encrypted storage.
+// If account is set in the env it does not allow overwriting it
 // Returns initialized Account address on success.
 const createStarknetAccountTool = tool(async () => {
+  if (STARKNET_ACCOUNT_ADDRESS && STARKNET_PRIVATE_KEY) {
+    return 'The account is set in the env and cannot be changed.'
+  }
   const { privateKey: newPrivateKey, starkKeyPub, OZcontractAddress } = await generateAccount();
 
   const fundingConfirmation = await new Promise<string>((resolve) => {

@@ -31,7 +31,7 @@ export const generateAccount = () => {
 export const deployAccount = async (privateKey: string, starkKeyPub: string, OZcontractAddress: string) => {
   const OZaccount = new Account(provider, OZcontractAddress, privateKey);
 
-  const { transaction_hash, contract_address } = await OZaccount.deployAccount({
+  const { transaction_hash } = await OZaccount.deployAccount({
     classHash: OZaccountClassHash,
     constructorCalldata: CallData.compile({ publicKey: starkKeyPub }),
     addressSalt: starkKeyPub,
