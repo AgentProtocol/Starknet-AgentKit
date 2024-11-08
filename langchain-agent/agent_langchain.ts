@@ -8,16 +8,17 @@ import { MemorySaver, Annotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { Account, RpcProvider } from "starknet";
 import { RPC_URL, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from './constants.js';
-import { generateAccount, deployAccount } from './util/wallet.js';
+import { generateAccount, deployAccount, getAccount } from './util/wallet.js';
 import { checkBalanceTool } from './check_balance.js';
 import { getNews } from './util/news.js';
 import { ChatOpenAI } from '@langchain/openai';
+import { readFromStorage, saveToStorage } from './util/storage.js';
 
-// Starknet account address and private key
-// can be overwritten by the agent if environment variables are not set
-// NOTICE: the created account will not persist between runs
-let privateKey: string | undefined = STARKNET_PRIVATE_KEY;
-let accountAddress: string | undefined = STARKNET_ACCOUNT_ADDRESS;
+// // Starknet account address and private key
+// // can be overwritten by the agent if environment variables are not set
+// // NOTICE: the created account will not persist between runs
+// let privateKey: string | undefined = STARKNET_PRIVATE_KEY;
+// let accountAddress: string | undefined = STARKNET_ACCOUNT_ADDRESS;
 
 // Interval ID for the news loop
 let backgroundActionInterval: NodeJS.Timeout | undefined;
@@ -92,11 +93,44 @@ const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
 
 // Tool to get the current starknet account
 const getCurrentAccountTool = tool(async () => {
-  return accountAddress;
+  const account = await getAccount();
+  if (!account) {
+    return 'Account does not exist, you need to create one first.';
+  }
+  return account.address;
 }, {
   name: "get_starknet_account",
   description: "Call to get current starkent account the agent is using."
 });
+
+
+// Tool to create a new Starknet account/wallet.
+// Generates new account credentials (private key, public key, contract address).
+// Prompts user to fund account via faucet before deployment.
+// Deploys account contract if funding confirmed.
+// Saves credentials to encrypted storage.
+// Returns initialized Account address on success.
+const createStarknetAccountTool = tool(async () => {
+  const { privateKey: newPrivateKey, starkKeyPub, OZcontractAddress } = await generateAccount();
+
+  const fundingConfirmation = await new Promise<string>((resolve) => {
+    rl.question(`Alright, here is the new account address: ${OZcontractAddress} . Please send some funds to it using the faucet: https://starknet-faucet.vercel.app . Let me know when you're done (yes/no): `, resolve);
+  })
+
+  if (fundingConfirmation.toLowerCase() !== 'yes') {
+    return 'Canceled by the user';
+  }
+
+  await deployAccount(newPrivateKey, starkKeyPub, OZcontractAddress);
+
+  await saveToStorage('privateKey', newPrivateKey);
+  await saveToStorage('accountAddress', OZcontractAddress);
+
+  return `New account address: ${OZcontractAddress}`;
+}, {
+  name: "create_starknet_account",
+  description: "Creates a new Starknet account / wallet. If wallet already exists, it will overwrite it."
+})
 
 // Tool to fetch latest crypto news
 // Makes API call to get current news articles
@@ -165,41 +199,8 @@ const stopBackgroundAction = tool(async () => {
   description: "Call to end a loop that executes an action every X seconds."
 });
 
-// Get a starknet account or generate a new one
-const getAccount = async () => {
-  if (accountAddress && privateKey) {
-    return new Account(provider, accountAddress, privateKey);
-  }
-
-  const creationConfirmation = await new Promise<string>((resolve) => {
-    rl.question(`To execute onchain transactions we need a funded account. Do you want to deploy a new account? (yes/no): `, resolve);
-  })
-
-  if (creationConfirmation.toLowerCase() !== 'yes') {
-    return;
-  }
-
-  const { privateKey: newPrivateKey, starkKeyPub, OZcontractAddress } = await generateAccount();
-
-  const fundingConfirmation = await new Promise<string>((resolve) => {
-    rl.question(`Alright, here is the new account address: ${OZcontractAddress}. Please send some funds to it using the faucet: https://starknet-faucet.vercel.app . Let me know when you're done (yes/no): `, resolve);
-  })
-
-  if (fundingConfirmation.toLowerCase() !== 'yes') {
-    return;
-  }
-
-  await deployAccount(newPrivateKey, starkKeyPub, OZcontractAddress);
-
-  privateKey = newPrivateKey;
-  accountAddress = OZcontractAddress;
-
-  return new Account(provider, accountAddress, privateKey);
-}
-
-
 // Declare tools once and include all tools
-const tools = [sendEthTool, checkBalanceTool, startBackgroundAction, stopBackgroundAction, getNewsTool, getCurrentAccountTool];
+const tools = [sendEthTool, checkBalanceTool, startBackgroundAction, stopBackgroundAction, getNewsTool, getCurrentAccountTool, createStarknetAccountTool];
 const toolNode = new ToolNode(tools);
 
 const model = new ChatOpenAI({

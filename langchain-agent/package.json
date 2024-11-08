@@ -10,6 +10,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
+    "@types/node-persist": "^3.1.8",
     "ts-node": "^10.9.2",
     "typescript": "^5.6.3"
   },
@@ -20,6 +21,7 @@
     "@langchain/openai": "^0.3.12",
     "dotenv": "^16.4.5",
     "ethers": "^6.13.4",
+    "node-persist": "^4.0.3",
     "rss-parser": "^3.13.0",
     "starknet": "^6.11.0",
     "zod": "^3.23.8"
