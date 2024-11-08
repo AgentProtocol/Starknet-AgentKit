@@ -5,7 +5,7 @@ An AI agent built with LangChain that can interact with Starknet blockchain and 
 ## Features
 
 - Send ETH transactions on Starknet Sepolia testnet
-- Check wallet balances
+- Check wallet balances 
 - Monitor and summarize crypto news in real-time
 - Interactive command-line interface
 - Automatic wallet creation and deployment
@@ -15,6 +15,7 @@ An AI agent built with LangChain that can interact with Starknet blockchain and 
 - Node.js and npm installed
 - Starknet wallet with some testnet ETH (or let the agent create one for you)
 - OpenAI API key for the LLM functionality
+- Alchemy RPC URL for Starknet
 
 ## Setup
 
@@ -28,7 +29,8 @@ An AI agent built with LangChain that can interact with Starknet blockchain and 
    ```
    OPENAI_API_KEY=your_openai_api_key
    STARKNET_ACCOUNT_ADDRESS=your_starknet_account_address (optional)
-   STARKNET_PRIVATE_KEY=your_starknet_private_key (optional)
+   STARKNET_PRIVATE_KEY=your_starknet_private_key (optional) 
+   RPC_URL=your_alchemy_rpc_url
    ```
 
 4. If you don't have a Starknet account, don't worry! The agent can create and deploy one for you. Just make sure to fund it using the [Starknet Sepolia Faucet](https://starknet-faucet.vercel.app).
@@ -42,4 +44,5 @@ An AI agent built with LangChain that can interact with Starknet blockchain and 
    - "Check my wallet balance"
    - "Send 0.01 ETH to 0x123..."
    - "Start monitoring crypto news and give me updates every 5 minutes"
+   - "Stop monitoring news"
    - Type "exit" to quit

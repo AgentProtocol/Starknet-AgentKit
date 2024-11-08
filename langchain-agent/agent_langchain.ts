@@ -20,7 +20,7 @@ let privateKey: string | undefined = STARKNET_PRIVATE_KEY;
 let accountAddress: string | undefined = STARKNET_ACCOUNT_ADDRESS;
 
 // Interval ID for the news loop
-let newsInterval: NodeJS.Timeout | undefined;
+let backgroundActionInterval: NodeJS.Timeout | undefined;
 
 // Alchemy Starknet RPC
 const provider = new RpcProvider({ 
@@ -39,6 +39,12 @@ const StateAnnotation = Annotation.Root({
 })
 
 // Define the tools for the agent to use
+
+// Tool to send ETH transactions on Starknet Sepolia testnet
+// Takes recipient address and ETH amount as input
+// Prompts user for confirmation before sending
+// Returns transaction hash and Starkscan link on success
+// Handles errors and returns error messages on failure
 const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
   try {
 
@@ -84,6 +90,10 @@ const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
   }),
 });
 
+// Tool to fetch latest crypto news
+// Makes API call to get current news articles
+// Returns news data as JSON string
+// Used for getting real-time updates on crypto market news and developments
 const getNewsTool = tool(async () => {
   return JSON.stringify(await getNews());
 }, {
@@ -91,18 +101,18 @@ const getNewsTool = tool(async () => {
   description: "Call to get news."
 });
 
-// Tool to start a periodic news fetching and summarization loop.
-// Sets up an interval to fetch news at specified frequency.
+// Tool to start a periodic background action loop.
+// Sets up an interval to execute a specified action at given frequency.
 // For each interval:
-//   - Fetches latest news articles
-//   - Sends them to the LLM for summarization 
-//   - Prints the summary to console
+//   - Executes the provided action through the LLM
+//   - Prints the LLM response to console
 //   - Restores the command prompt
-// Returns confirmation message when loop is started
+// If a previous loop exists, stops it before starting new one.
+// Returns confirmation message when loop is started.
 const startBackgroundAction = tool(async ({ whatToDo, intervalInSeconds }) => {
-  if (newsInterval) {
-    clearInterval(newsInterval);
-    newsInterval = undefined;
+  if (backgroundActionInterval) {
+    clearInterval(backgroundActionInterval);
+    backgroundActionInterval = undefined;
   }
   const sumarizeNews = async () => {
     const message = whatToDo;
@@ -120,7 +130,7 @@ const startBackgroundAction = tool(async ({ whatToDo, intervalInSeconds }) => {
     readline.clearLine(process.stdout, 1); // Clear the current line
     rl.prompt(); // Show the prompt again
   }
-  newsInterval = await setInterval(sumarizeNews, intervalInSeconds * 1000);
+  backgroundActionInterval = await setInterval(sumarizeNews, intervalInSeconds * 1000);
   return "Started.";
 }, {
   name: "start_background_action",
@@ -132,14 +142,14 @@ const startBackgroundAction = tool(async ({ whatToDo, intervalInSeconds }) => {
 });
 
 
-// Tool to stop the news fetching loop.
-// Checks if a news interval is currently running.
+// Tool to stop a background action loop.
+// Checks if an interval is currently running.
 // If running, clears the interval and resets the interval ID.
-// Returns confirmation message when loop is stopped
+// Returns confirmation message when loop is stopped.
 const stopBackgroundAction = tool(async () => {
-  if (newsInterval) {
-    clearInterval(newsInterval);
-    newsInterval = undefined;
+  if (backgroundActionInterval) {
+    clearInterval(backgroundActionInterval);
+    backgroundActionInterval = undefined;
   }
   return "Stopped.";
 }, {
@@ -227,9 +237,9 @@ async function askQuestion() {
     });
 
     if (question.toLowerCase() === 'exit') {
-      if (newsInterval) {
-        clearInterval(newsInterval);
-        newsInterval = undefined;
+      if (backgroundActionInterval) {
+        clearInterval(backgroundActionInterval);
+        backgroundActionInterval = undefined;
       }
       rl.close();
       break;
