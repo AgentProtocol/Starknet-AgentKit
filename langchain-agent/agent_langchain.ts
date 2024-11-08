@@ -17,7 +17,7 @@ import { checkBalanceTool } from "./check_balance.js";
 import { getNews } from "./util/news.js";
 import { ChatOpenAI } from "@langchain/openai";
 
-// TG bot setup start
+// Telegram bot setup start
 import { Telegraf } from "telegraf";
 import { message } from "./tg_bot/filters.js";
 import * as dotenv from "dotenv";
@@ -30,7 +30,6 @@ if (!botToken) {
   process.exit(1); // Exit the program with error code
 }
 const bot = new Telegraf(botToken);
-// Remember, this should ideally be written before `bot.launch()`!
 
 if (!process.env.BOT_TOKEN) {
   throw new Error("BOT_TOKEN is not set");
@@ -41,21 +40,13 @@ bot.start((ctx) => {
 
 let reply = "GM GM, Starknet Brother is here to help! 👍";
 
-// bot.on(message("text"), (ctx) => ctx.reply(reply));
+// Telegram bot setup finish
+import { readFromStorage, saveToStorage } from './util/storage.js';
 
-// TG bot setup finish
-import { saveToStorage } from './util/storage.js';
-
-// // Starknet account address and private key
-// // can be overwritten by the agent if environment variables are not set
-// // NOTICE: the created account will not persist between runs
-// let privateKey: string | undefined = STARKNET_PRIVATE_KEY;
-// let accountAddress: string | undefined = STARKNET_ACCOUNT_ADDRESS;
-
-// Interval ID for the news loop
+// Interval ID for background tasks
 let backgroundActionInterval: NodeJS.Timeout | undefined;
 
-// Alchemy Starknet RPC
+// Initialize Starknet provider with RPC URL
 const provider = new RpcProvider({
   nodeUrl: RPC_URL,
 });
@@ -64,12 +55,13 @@ const provider = new RpcProvider({
 const ETH_TOKEN_ADDRESS =
   "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
 
-// Define the graph state
+// Define the graph state for message history
 const StateAnnotation = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
     reducer: (x, y) => x.concat(y),
   }),
 });
+
 
 // Define the tools for the agent to use
 
@@ -84,7 +76,7 @@ const sendEthTool = tool(
       const account = await getAccount();
 
       if (!account) {
-        return "Transaction cancelled by user.";
+        return "Account does not exist, you need to create one first.";
       }
 
       // Get confirmation before proceeding
@@ -130,7 +122,7 @@ const sendEthTool = tool(
   }
 );
 
-// Tool to get the current starknet account
+// Tool to get the current Starknet account address
 const getCurrentAccountTool = tool(async () => {
   const account = await getAccount();
   if (!account) {
@@ -138,81 +130,91 @@ const getCurrentAccountTool = tool(async () => {
   }
   return account.address;
 }, {
-  name: "get_starknet_account",
-  description: "Call to get current starkent account the agent is using."
+  name: "get_starknet_account", 
+  description: "Get the address of the current Starknet account"
 });
 
-
-// Tool to create a new Starknet account/wallet.
-// Generates new account credentials (private key, public key, contract address).
-// Prompts user to fund account via faucet before deployment.
-// Deploys account contract if funding confirmed.
-// Saves credentials to encrypted storage.
-// If account is set in the env it does not allow overwriting it
-// Returns initialized Account address on success.
-const createStarknetAccountTool = tool(async () => {
+// Tool to deploy a previously generated Starknet account
+// Requires the account to be funded first
+// Uses private key from storage to deploy the account contract
+// Saves the deployed account credentials to storage
+// Returns the deployed account address
+const deployStarknetAccountTool = tool(async () => {
   if (STARKNET_ACCOUNT_ADDRESS && STARKNET_PRIVATE_KEY) {
     return 'The account is set in the env and cannot be changed.'
   }
-  const { privateKey: newPrivateKey, starkKeyPub, OZcontractAddress } = await generateAccount();
 
-  const fundingConfirmation = await new Promise<string>((resolve) => {
-    rl.question(`Alright, here is the new account address: ${OZcontractAddress} . Please send some funds to it using the faucet: https://starknet-faucet.vercel.app . Let me know when you're done (yes/no): `, resolve);
-  })
+  const privateKey = await readFromStorage('generatedAccountPrivateKey');
 
-  if (fundingConfirmation.toLowerCase() !== 'yes') {
-    return 'Canceled by the user';
-  }
+  const { OZcontractAddress } = await deployAccount(privateKey);
 
-  await deployAccount(newPrivateKey, starkKeyPub, OZcontractAddress);
-
-  await saveToStorage('privateKey', newPrivateKey);
+  await saveToStorage('privateKey', privateKey);
   await saveToStorage('accountAddress', OZcontractAddress);
 
-  return `New account address: ${OZcontractAddress}`;
+  return `Account deployed. Address: ${OZcontractAddress}`;
 }, {
-  name: "create_starknet_account",
-  description: "Creates a new Starknet account / wallet. If wallet already exists, it will overwrite it."
+  name: "deploy_starknet_account",
+  description: `Deploys the Starknet account / wallet after the user has funded it.
+  If wallet already exists, it will overwrite it.
+  This is the last step in account creation.`
+})
+
+// Tool to generate a new Starknet account
+// Creates new account credentials but does not deploy the contract
+// Saves private key to storage for later deployment
+// Returns the account address for funding
+const generateStarknetAccountTool = tool(async () => {
+  if (STARKNET_ACCOUNT_ADDRESS && STARKNET_PRIVATE_KEY) {
+    return 'The account is set in the env and cannot be changed.'
+  }
+  const { privateKey: newPrivateKey, OZcontractAddress } = await generateAccount();
+
+  await saveToStorage('generatedAccountPrivateKey', newPrivateKey);
+
+  return `Here is the new account address: ${OZcontractAddress} . Please send some funds to it using the faucet: https://starknet-faucet.vercel.app . Let me know when you're done and I will deploy the account.`;
+}, {
+  name: "generate_starknet_account",
+  description: `Generates a new Starknet account address.
+    If one already exists, it will overwrite it.
+    This is the first step in account creation.
+    After this the user needs to fund the address and when it is funded we need to deploy the account.`
 })
 
 // Tool to fetch latest crypto news
-// Makes API call to get current news articles
-// Returns news data as JSON string
-// Used for getting real-time updates on crypto market news and developments
 const getNewsTool = tool(
   async () => {
     return JSON.stringify(await getNews());
   },
   {
     name: "get_news",
-    description: "Call to get news.",
+    description: "Get the latest crypto news",
   }
 );
 
-// Tool to start a periodic background action loop.
-// Sets up an interval to execute a specified action at given frequency.
-// For each interval:
-//   - Executes the provided action through the LLM
-//   - Prints the LLM response to console
-//   - Restores the command prompt
-// If a previous loop exists, stops it before starting new one.
-// Returns confirmation message when loop is started.
+// Tool to start a periodic background action
+// Takes an action description and interval in seconds
+// Creates a new interval that executes the action periodically
+// Clears any existing interval before starting new one
 const startBackgroundAction = tool(
-  async ({ whatToDo, intervalInSeconds }) => {
+  async ({ whatToDo, intervalInSeconds }, options) => {
+    const chatId = options.metadata.thread_id;
+    
     if (backgroundActionInterval) {
       clearInterval(backgroundActionInterval);
       backgroundActionInterval = undefined;
     }
-    const sumarizeNews = async () => {
+    const doAction = async () => {
       const message = whatToDo;
 
       const finalState = await app.invoke(
         { messages: [new HumanMessage(message)] },
-        { configurable: { thread_id: "42" } }
+        { configurable: { thread_id: Number(chatId) } }
       );
-      console.log("\n------UPDATE------\n");
-      console.log(finalState.messages[finalState.messages.length - 1].content);
-      console.log("\n-------------------\n");
+      bot.telegram.sendMessage(chatId,finalState.messages[finalState.messages.length - 1].content)
+
+      // console.log("\n------UPDATE------\n");
+      // console.log(finalState.messages[finalState.messages.length - 1].content);
+      // console.log("\n-------------------\n");
 
       // Move the cursor back to the input line
       readline.cursorTo(process.stdout, 0);
@@ -220,7 +222,7 @@ const startBackgroundAction = tool(
       rl.prompt(); // Show the prompt again
     };
     backgroundActionInterval = await setInterval(
-      sumarizeNews,
+      doAction,
       intervalInSeconds * 1000
     );
     return "Started.";
@@ -242,10 +244,7 @@ const startBackgroundAction = tool(
   }
 );
 
-// Tool to stop a background action loop.
-// Checks if an interval is currently running.
-// If running, clears the interval and resets the interval ID.
-// Returns confirmation message when loop is stopped.
+// Tool to stop the current background action
 const stopBackgroundAction = tool(async () => {
   if (backgroundActionInterval) {
     clearInterval(backgroundActionInterval);
@@ -254,11 +253,20 @@ const stopBackgroundAction = tool(async () => {
   return "Stopped.";
 }, {
   name: "stop_background_action",
-  description: "Call to end a loop that executes an action every X seconds."
+  description: "Stop the currently running background action loop"
 });
 
-// Declare tools once and include all tools
-const tools = [sendEthTool, checkBalanceTool, startBackgroundAction, stopBackgroundAction, getNewsTool, getCurrentAccountTool, createStarknetAccountTool];
+// Initialize available tools
+const tools = [
+  sendEthTool,
+  checkBalanceTool,
+  startBackgroundAction,
+  stopBackgroundAction,
+  getNewsTool,
+  getCurrentAccountTool,
+  generateStarknetAccountTool,
+  deployStarknetAccountTool
+];
 const toolNode = new ToolNode(tools);
 
 const model = new ChatOpenAI({
@@ -298,16 +306,12 @@ const rl = readline.createInterface({
 });
 
 bot.on(message("text"), async (ctx) => {
-  ctx.reply(
-    "Cool idea, lemme think about it, will be right back with a reply 👍"
-  );
-
+  if (!ctx.chat.id) return;
   const finalState = await app.invoke(
     { messages: [new HumanMessage(ctx.message.text)] },
-    { configurable: { thread_id: "42" } }
+    { configurable: { thread_id: Number(ctx.chat.id) } }
   );
   // response of the agent
-  console.log(finalState.messages[finalState.messages.length - 1].content);
   ctx.reply(finalState.messages[finalState.messages.length - 1].content);
 });
 
@@ -315,10 +319,6 @@ bot.on(message("text"), async (ctx) => {
 //   while (true) {
 //     const question = await new Promise<string>((resolve) => {
 //       rl.question('Ask a question (or type "exit" to quit): ', resolve);
-
-//       bot.on(message("sticker"), (ctx) => ctx.reply("Cool pic 👍"));
-
-//       console.log(message);
 //     });
 
 //     if (question.toLowerCase() === "exit") {

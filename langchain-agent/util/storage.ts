@@ -4,7 +4,6 @@ import crypto from 'crypto';
 const STORAGE_ENCRYPTION_KEY = process.env.STORAGE_ENCRYPTION_KEY || 'dK9x#mP2$vL7nQ4@jR5tY8*wC3hF6bN9'; // Should be 32 bytes
 const IV_LENGTH = 16; // For AES, this is always 16
 
-
 // Initialize the storage
 (async () => {
     await storage.init({
