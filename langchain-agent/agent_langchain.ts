@@ -10,6 +10,12 @@ import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { Account, RpcProvider } from "starknet";
 import { RPC_URL, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from './constants.js';
 import { generateAccount, deployAccount } from './util/wallet.js';
+// child process to run the Cairo compiler command
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { checkBalanceTool } from './check_balance.js';
+import { getNews } from './util/news.js';
+import { ChatOpenAI } from '@langchain/openai';
 import { executeSwap, getQuote, type ExecuteSwapOptions, type Quote } from './swap.js';
 import { ETH_ADDRESS, STRK_ADDRESS } from './swap.js';
 import { formatUnits } from "ethers";
@@ -20,15 +26,13 @@ import { formatUnits } from "ethers";
 let privateKey: string | undefined = STARKNET_PRIVATE_KEY;
 let accountAddress: string | undefined = STARKNET_ACCOUNT_ADDRESS;
 
+// Interval ID for the news loop
+let newsInterval: NodeJS.Timeout | undefined;
+
 // Alchemy Starknet RPC
 const provider = new RpcProvider({ 
   nodeUrl: RPC_URL
 });
-// child process to run the Cairo compiler command
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as fs from 'fs';
-import { checkBalanceTool } from './check_balance.js';
 
 // run cairo-compile whenever deployTokenTool is called
 const execAsync = promisify(exec);
@@ -45,51 +49,6 @@ const StateAnnotation = Annotation.Root({
 })
 
 // Define the tools for the agent to use
-const weatherTool = tool(async ({ query }) => {
-  if (query.toLowerCase().includes("sf") || query.toLowerCase().includes("san francisco")) {
-    return "It's 60 degrees and foggy."
-  }
-  return "It's 90 degrees and sunny."
-}, {
-  name: "weather",
-  description: "Call to get the current weather for a location.",
-  schema: z.object({
-    query: z.string().describe("The query to use in your search."),
-  }),
-});
-
-// Get a starknet account or generate a new one
-const getAccount = async () => {
-  if (accountAddress && privateKey) {
-    return new Account(provider, accountAddress, privateKey);
-  }
-
-  const creationConfirmation = await new Promise<string>((resolve) => {
-    rl.question(`To execute onchain transactions we need a funded account. Do you want to deploy a new account? (yes/no): `, resolve);
-  })
-
-  if (creationConfirmation.toLowerCase() !== 'yes') {
-    return;
-  }
-
-  const { privateKey: newPrivateKey, starkKeyPub, OZcontractAddress } = await generateAccount();
-
-  const fundingConfirmation = await new Promise<string>((resolve) => {
-    rl.question(`Alright, here is the new account address: ${OZcontractAddress}. Please send some funds to it using the faucet: https://starknet-faucet.vercel.app . Let me know when you're done (yes/no): `, resolve);
-  })
-
-  if (fundingConfirmation.toLowerCase() !== 'yes') {
-    return;
-  }
-
-  await deployAccount(newPrivateKey, starkKeyPub, OZcontractAddress);
-
-  privateKey = newPrivateKey;
-  accountAddress = OZcontractAddress;
-
-  return new Account(provider, accountAddress, privateKey);
-}
-
 const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
   try {
 
@@ -187,12 +146,103 @@ const swapTool = tool(async ({ tokenInAddress, tokenOutAddress, amountIn }) => {
   }),
 });
 
+
+// Tool to start a periodic news fetching and summarization loop.
+// Sets up an interval to fetch news at specified frequency.
+// For each interval:
+//   - Fetches latest news articles
+//   - Sends them to the LLM for summarization 
+//   - Prints the summary to console
+//   - Restores the command prompt
+// Returns confirmation message when loop is started
+const startNewsLoopTool = tool(async ({ intervalInSeconds }) => {
+  const sumarizeNews = async () => {
+    const news = await getNews();
+
+    const message = `Bellow are some news articles.
+    Please read them and respond with your thoughts in 2 sentences.
+    Respond only with your thoughts about the articles and nothing else.
+    Here are the articles:
+    ${JSON.stringify(news)}`;
+
+    const finalState = await app.invoke(
+      { messages: [ new HumanMessage(message)] },
+      { configurable: { thread_id: "42" } }
+    );
+    console.log('\n----NEWS UPDATE----\n')
+    console.log(finalState.messages[finalState.messages.length - 1].content);
+    console.log('\n-------------------\n');
+
+    // Move the cursor back to the input line
+    readline.cursorTo(process.stdout, 0);
+    readline.clearLine(process.stdout, 1); // Clear the current line
+    rl.prompt(); // Show the prompt again
+  }
+  newsInterval = await setInterval(sumarizeNews, intervalInSeconds * 1000);
+  return "News loop started.";
+}, {
+  name: "start_news_loop",
+  description: "Call to start a loop that fetches news every X seconds.",
+  schema: z.object({
+    intervalInSeconds: z.number().describe("The number of seconds that needs to pass before the news are fetched again."),
+  }),
+});
+
+
+// Tool to stop the news fetching loop.
+// Checks if a news interval is currently running.
+// If running, clears the interval and resets the interval ID.
+// Returns confirmation message when loop is stopped
+const endNewsLoopTool = tool(async () => {
+  if (newsInterval) {
+    clearInterval(newsInterval);
+    newsInterval = undefined;
+  }
+  return "News loop ended.";
+}, {
+  name: "end_news_loop",
+  description: "Call to end a loop that fetches news every X seconds."
+});
+
+// Get a starknet account or generate a new one
+const getAccount = async () => {
+  if (accountAddress && privateKey) {
+    return new Account(provider, accountAddress, privateKey);
+  }
+
+  const creationConfirmation = await new Promise<string>((resolve) => {
+    rl.question(`To execute onchain transactions we need a funded account. Do you want to deploy a new account? (yes/no): `, resolve);
+  })
+
+  if (creationConfirmation.toLowerCase() !== 'yes') {
+    return;
+  }
+
+  const { privateKey: newPrivateKey, starkKeyPub, OZcontractAddress } = await generateAccount();
+
+  const fundingConfirmation = await new Promise<string>((resolve) => {
+    rl.question(`Alright, here is the new account address: ${OZcontractAddress}. Please send some funds to it using the faucet: https://starknet-faucet.vercel.app . Let me know when you're done (yes/no): `, resolve);
+  })
+
+  if (fundingConfirmation.toLowerCase() !== 'yes') {
+    return;
+  }
+
+  await deployAccount(newPrivateKey, starkKeyPub, OZcontractAddress);
+
+  privateKey = newPrivateKey;
+  accountAddress = OZcontractAddress;
+
+  return new Account(provider, accountAddress, privateKey);
+}
+
+
 // Declare tools once and include all tools
-const tools = [weatherTool, sendEthTool, checkBalanceTool, swapTool];
+const tools = [sendEthTool, checkBalanceTool, swapTool, startNewsLoopTool, endNewsLoopTool];
 const toolNode = new ToolNode(tools);
 
-const model = new ChatAnthropic({
-  model: "claude-3-5-sonnet-20240620",
+const model = new ChatOpenAI({
+  model: "gpt-4o-mini",
   temperature: 0,
 }).bindTools(tools);
 
@@ -234,6 +284,10 @@ async function askQuestion() {
     });
 
     if (question.toLowerCase() === 'exit') {
+      if (newsInterval) {
+        clearInterval(newsInterval);
+        newsInterval = undefined;
+      }
       rl.close();
       break;
     }
