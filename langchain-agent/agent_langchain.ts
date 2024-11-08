@@ -3,16 +3,12 @@ import * as readline from 'readline';
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { ChatAnthropic } from "@langchain/anthropic";
 import { StateGraph } from "@langchain/langgraph";
 import { MemorySaver, Annotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { Account, RpcProvider } from "starknet";
 import { RPC_URL, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from './constants.js';
 import { generateAccount, deployAccount } from './util/wallet.js';
-// child process to run the Cairo compiler command
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { checkBalanceTool } from './check_balance.js';
 import { getNews } from './util/news.js';
 import { ChatOpenAI } from '@langchain/openai';
@@ -30,9 +26,6 @@ let newsInterval: NodeJS.Timeout | undefined;
 const provider = new RpcProvider({ 
   nodeUrl: RPC_URL
 });
-
-// run cairo-compile whenever deployTokenTool is called
-const execAsync = promisify(exec);
 
 // ETH token address on Starknet Sepolia
 const ETH_TOKEN_ADDRESS = "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
@@ -64,13 +57,6 @@ const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
       return "Transaction cancelled by user.";
     }
 
-    const accountAddress = process.env.STARKNET_ACCOUNT_ADDRESS;
-    const privateKey = process.env.STARKNET_PRIVATE_KEY;
-
-    if (!accountAddress || !privateKey) {
-      return "Error: Missing account credentials in environment variables";
-    }
-    
     // Convert ETH to wei (ETH * 10^18)
     const amountInWei = (BigInt(Math.floor(parseFloat(amountInEth) * 1e18))).toString();
 
