@@ -1,3 +1,5 @@
+//! swaps from STRK to ETH fail occasionally, behavior not consistent
+
 import type { AccountInterface } from "starknet";
 import { executeSwap as avnuExecuteSwap, fetchQuotes, type Quote as AvnuQuote } from "@avnu/avnu-sdk";
 import { parseUnits, formatUnits } from "ethers";

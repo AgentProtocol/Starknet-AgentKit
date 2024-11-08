@@ -119,8 +119,17 @@ const swapTool = tool(
   async (input: { tokenInAddress: string; tokenOutAddress: string; amountIn: string }) => {
     try {
       // Normalize token addresses
-      const normalizedTokenIn = input.tokenInAddress.toLowerCase() === 'eth' ? ETH_ADDRESS : input.tokenInAddress;
-      const normalizedTokenOut = input.tokenOutAddress.toLowerCase() === 'strk' ? STRK_ADDRESS : input.tokenOutAddress;
+      const normalizedTokenIn = input.tokenInAddress.toLowerCase() === 'eth' 
+        ? ETH_ADDRESS 
+        : input.tokenInAddress.toLowerCase() === 'strk'
+          ? STRK_ADDRESS
+          : input.tokenInAddress;
+
+      const normalizedTokenOut = input.tokenOutAddress.toLowerCase() === 'eth'
+        ? ETH_ADDRESS
+        : input.tokenOutAddress.toLowerCase() === 'strk'
+          ? STRK_ADDRESS
+          : input.tokenOutAddress;
 
       const account = await getAccount();
       if (!account) {
