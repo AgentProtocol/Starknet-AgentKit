@@ -14,7 +14,7 @@ import { getNews } from './util/news.js';
 import { ChatOpenAI } from '@langchain/openai';
 
 // Starknet account address and private key
-//can be overwritten by the agent if environment variables are not set
+// can be overwritten by the agent if environment variables are not set
 // NOTICE: the created account will not persist between runs
 let privateKey: string | undefined = STARKNET_PRIVATE_KEY;
 let accountAddress: string | undefined = STARKNET_ACCOUNT_ADDRESS;
@@ -84,6 +84,12 @@ const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
   }),
 });
 
+const getNewsTool = tool(async () => {
+  return JSON.stringify(await getNews());
+}, {
+  name: "get_news",
+  description: "Call to get news."
+});
 
 // Tool to start a periodic news fetching and summarization loop.
 // Sets up an interval to fetch news at specified frequency.
@@ -93,21 +99,19 @@ const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
 //   - Prints the summary to console
 //   - Restores the command prompt
 // Returns confirmation message when loop is started
-const startNewsLoopTool = tool(async ({ intervalInSeconds }) => {
+const startBackgroundAction = tool(async ({ whatToDo, intervalInSeconds }) => {
+  if (newsInterval) {
+    clearInterval(newsInterval);
+    newsInterval = undefined;
+  }
   const sumarizeNews = async () => {
-    const news = await getNews();
-
-    const message = `Bellow are some news articles.
-    Please read them and respond with your thoughts in 2 sentences.
-    Respond only with your thoughts about the articles and nothing else.
-    Here are the articles:
-    ${JSON.stringify(news)}`;
+    const message = whatToDo;
 
     const finalState = await app.invoke(
       { messages: [ new HumanMessage(message)] },
       { configurable: { thread_id: "42" } }
     );
-    console.log('\n----NEWS UPDATE----\n')
+    console.log('\n------UPDATE------\n')
     console.log(finalState.messages[finalState.messages.length - 1].content);
     console.log('\n-------------------\n');
 
@@ -117,11 +121,12 @@ const startNewsLoopTool = tool(async ({ intervalInSeconds }) => {
     rl.prompt(); // Show the prompt again
   }
   newsInterval = await setInterval(sumarizeNews, intervalInSeconds * 1000);
-  return "News loop started.";
+  return "Started.";
 }, {
-  name: "start_news_loop",
-  description: "Call to start a loop that fetches news every X seconds.",
+  name: "start_background_action",
+  description: "Call to start a loop that executes an action every X seconds. Or stop the current loop and start a new one.",
   schema: z.object({
+    whatToDo: z.string().describe("The action that you want to execute every X second."),
     intervalInSeconds: z.number().describe("The number of seconds that needs to pass before the news are fetched again."),
   }),
 });
@@ -131,15 +136,15 @@ const startNewsLoopTool = tool(async ({ intervalInSeconds }) => {
 // Checks if a news interval is currently running.
 // If running, clears the interval and resets the interval ID.
 // Returns confirmation message when loop is stopped
-const endNewsLoopTool = tool(async () => {
+const stopBackgroundAction = tool(async () => {
   if (newsInterval) {
     clearInterval(newsInterval);
     newsInterval = undefined;
   }
-  return "News loop ended.";
+  return "Stopped.";
 }, {
-  name: "end_news_loop",
-  description: "Call to end a loop that fetches news every X seconds."
+  name: "stop_background_action",
+  description: "Call to end a loop that executes an action every X seconds."
 });
 
 // Get a starknet account or generate a new one
@@ -176,7 +181,7 @@ const getAccount = async () => {
 
 
 // Declare tools once and include all tools
-const tools = [sendEthTool, checkBalanceTool, startNewsLoopTool, endNewsLoopTool];
+const tools = [sendEthTool, checkBalanceTool, startBackgroundAction, stopBackgroundAction, getNewsTool];
 const toolNode = new ToolNode(tools);
 
 const model = new ChatOpenAI({
