@@ -1,38 +1,15 @@
 import type { AccountInterface } from "starknet";
-import { fetchQuotes, executeSwap as avnuExecuteSwap, type Quote as AvnuQuote } from "@avnu/avnu-sdk";
+import { executeSwap as avnuExecuteSwap, fetchQuotes, type Quote as AvnuQuote } from "@avnu/avnu-sdk";
 import { parseUnits, formatUnits } from "ethers";
 
 const AVNU_OPTIONS = { baseUrl: 'https://sepolia.api.avnu.fi' };
 
-// ETH and STRK addresses on Sepolia
 export const ETH_ADDRESS = "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
 export const STRK_ADDRESS = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
-
-export interface Quote {
-  buyAmount: string;
-  sellAmount: string;
-  // other properties from Avnu SDK Quote interface
-}
 
 export interface ExecuteSwapOptions {
   executeApprove?: boolean;
   slippage?: number;
-}
-
-export async function checkConnection(): Promise<boolean> {
-  try {
-    await fetchQuotes({
-      sellTokenAddress: "0x1", // dummy value
-      buyTokenAddress: "0x2",  // dummy value
-      sellAmount: BigInt(1),
-      size: 1
-    }, AVNU_OPTIONS);
-    console.log("✅ Successfully connected to Avnu API");
-    return true;
-  } catch (error) {
-    console.error("❌ Failed to connect to Avnu API:", error);
-    return false;
-  }
 }
 
 export async function getQuote(
@@ -41,12 +18,11 @@ export async function getQuote(
   amountIn: string
 ): Promise<AvnuQuote> {
   try {
-    // Convert human readable amount to wei
     const amountInWei = BigInt(Math.floor(parseFloat(amountIn) * 1e18)).toString();
     
     const params = {
-      sellTokenAddress: tokenInAddress.toLowerCase() === 'eth' ? ETH_ADDRESS : tokenInAddress,
-      buyTokenAddress: tokenInAddress.toLowerCase() === 'strk' ? STRK_ADDRESS : tokenOutAddress,
+      sellTokenAddress: tokenInAddress,
+      buyTokenAddress: tokenOutAddress,
       sellAmount: BigInt(amountInWei),
       size: 1,
     };
@@ -69,28 +45,23 @@ export async function executeSwap(
   try {
     console.log("🔄 Executing swap...");
     
-    // Get a fresh quote right before executing the swap
-    console.log("🔄 Refreshing quote...");
-    const freshQuotes = await fetchQuotes({
-      sellTokenAddress: quote.sellTokenAddress,
-      buyTokenAddress: quote.buyTokenAddress,
-      sellAmount: quote.sellAmount,
-      size: 1
-    }, AVNU_OPTIONS);
-    
-    const freshQuote = freshQuotes[0];
-    console.log("✅ Fresh quote received");
     console.log("📊 Quote details:", {
-      sellAmount: freshQuote.sellAmount.toString(),
-      buyAmount: freshQuote.buyAmount.toString(),
-      quoteId: freshQuote.quoteId
+      sellAmount: quote.sellAmount.toString(),
+      buyAmount: quote.buyAmount.toString(),
+      quoteId: quote.quoteId
     });
 
+    // Execute swap directly with the original quote
     const result = await avnuExecuteSwap(
       account,
-      freshQuote,
-      options
+      quote,
+      {
+        ...options,
+        executeApprove: true,
+        slippage: 0.01
+      }
     );
+    
     console.log("✅ Swap executed successfully");
     return {
       transactionHash: result.transactionHash
@@ -103,11 +74,11 @@ export async function executeSwap(
         sellToken: quote.sellTokenAddress,
         buyToken: quote.buyTokenAddress,
         sellAmount: quote.sellAmount.toString(),
-        buyAmount: quote.buyAmount.toString(),
-        quoteId: quote.quoteId
-      },
-      options
+        buyAmount: quote.buyAmount.toString()
+      }
     });
     throw error;
   }
 }
+
+export type Quote = AvnuQuote;

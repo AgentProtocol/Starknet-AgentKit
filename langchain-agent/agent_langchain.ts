@@ -16,8 +16,14 @@ import { promisify } from 'util';
 import { checkBalanceTool } from './check_balance.js';
 import { getNews } from './util/news.js';
 import { ChatOpenAI } from '@langchain/openai';
-import { executeSwap, getQuote, type ExecuteSwapOptions, type Quote } from './swap.js';
-import { ETH_ADDRESS, STRK_ADDRESS } from './swap.js';
+import { 
+  executeSwap, 
+  getQuote, 
+  type ExecuteSwapOptions, 
+  type Quote,
+  ETH_ADDRESS,
+  STRK_ADDRESS
+} from './swap.js';
 import { formatUnits } from "ethers";
 
 // Starknet account address and private key
@@ -101,51 +107,62 @@ const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
   }),
 });
 
-// Add this new tool definition after your existing tools
-const swapTool = tool(async ({ tokenInAddress, tokenOutAddress, amountIn }) => {
-  try {
-    // Normalize token addresses
-    const normalizedTokenIn = tokenInAddress.toLowerCase() === 'eth' ? ETH_ADDRESS : tokenInAddress;
-    const normalizedTokenOut = tokenOutAddress.toLowerCase() === 'strk' ? STRK_ADDRESS : tokenOutAddress;
+// Define the input type for the swap function
+interface SwapInput {
+  tokenInAddress: string;
+  tokenOutAddress: string;
+  amountIn: string;
+}
 
-    const account = await getAccount();
-    if (!account) {
-      return "Transaction cancelled by user.";
+// Define the swap function
+const swapTool = tool(
+  async (input: { tokenInAddress: string; tokenOutAddress: string; amountIn: string }) => {
+    try {
+      // Normalize token addresses
+      const normalizedTokenIn = input.tokenInAddress.toLowerCase() === 'eth' ? ETH_ADDRESS : input.tokenInAddress;
+      const normalizedTokenOut = input.tokenOutAddress.toLowerCase() === 'strk' ? STRK_ADDRESS : input.tokenOutAddress;
+
+      const account = await getAccount();
+      if (!account) {
+        return "Transaction cancelled by user.";
+      }
+
+      const quote = await getQuote(normalizedTokenIn, normalizedTokenOut, input.amountIn);
+      
+      const confirmation = await new Promise<string>((resolve) => {
+        rl.question(
+          `Do you want to swap ${input.amountIn} tokens from ${input.tokenInAddress} to ${input.tokenOutAddress}? ` +
+          `Expected output: ${formatUnits(quote.buyAmount, 18)} (yes/no): `,
+          resolve
+        );
+      });
+
+      if (confirmation.toLowerCase() !== 'yes') {
+        return "Transaction cancelled by user.";
+      }
+
+      const result = await executeSwap(account, quote, {
+        executeApprove: true,
+        slippage: 0.01
+      });
+
+      return `Swap executed successfully! Transaction hash: ${result.transactionHash}`;
+    } catch (error) {
+      console.error("Error in swap:", error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      return `Failed to execute swap: ${errorMessage}. Please try again with a different amount or check your balance.`;
     }
-
-    const quote = await getQuote(normalizedTokenIn, normalizedTokenOut, amountIn);
-    
-    const confirmation = await new Promise<string>((resolve) => {
-      rl.question(`Do you want to swap ${amountIn} tokens from ${tokenInAddress} to ${tokenOutAddress}? Expected output: ${formatUnits(quote.buyAmount, 18)} (yes/no): `, resolve);
-    });
-
-    if (confirmation.toLowerCase() !== 'yes') {
-      return "Transaction cancelled by user.";
-    }
-
-    const result = await executeSwap(account, quote, {
-      executeApprove: true,
-      slippage: 0.005
-    });
-
-    return `Swap transaction submitted. Hash: ${result.transactionHash}
-            View on Starkscan: https://sepolia.starkscan.co/tx/${result.transactionHash}`;
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      return `Error executing swap: ${error.message}`;
-    }
-    return `Error executing swap: Unknown error occurred`;
+  },
+  {
+    name: "swap",
+    description: "Swap tokens on Starknet",
+    schema: z.object({
+      tokenInAddress: z.string().describe("The address of the token to swap from"),
+      tokenOutAddress: z.string().describe("The address of the token to swap to"),
+      amountIn: z.string().describe("The amount of tokens to swap")
+    })
   }
-}, {
-  name: "swap_tokens",
-  description: "Swap tokens on Starknet using Avnu aggregator",
-  schema: z.object({
-    tokenInAddress: z.string().describe("The address of the token to swap from"),
-    tokenOutAddress: z.string().describe("The address of the token to swap to"),
-    amountIn: z.string().describe("The amount of tokens to swap"),
-  }),
-});
-
+);
 
 // Tool to start a periodic news fetching and summarization loop.
 // Sets up an interval to fetch news at specified frequency.
