@@ -10,16 +10,14 @@ import { StateGraph } from "@langchain/langgraph";
 import { MemorySaver, Annotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { Account, RpcProvider } from "starknet";
+// child process to run the Cairo compiler command
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import * as fs from 'fs';
+import { checkBalanceTool, provider as balanceProvider } from './check_balance';
 
-/*
-  -//! wallet creation function missing
-  -//! request funds from faucet function missing
- */
-
-// Alchemy Starknet RPC
-const provider = new RpcProvider({ 
-  nodeUrl: "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_7/UiB8n0FBudlTFaqo7pwvNci7e8JzZS9P"
-});
+// run cairo-compile whenever deployTokenTool is called
+const execAsync = promisify(exec);
 
 // ETH token address on Starknet Sepolia
 const ETH_TOKEN_ADDRESS = "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
@@ -63,7 +61,7 @@ const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
       return "Error: Missing account credentials in environment variables";
     }
 
-    const account = new Account(provider, accountAddress, privateKey);
+    const account = new Account(balanceProvider, accountAddress, privateKey);
     
     // Convert ETH to wei (ETH * 10^18)
     const amountInWei = (BigInt(Math.floor(parseFloat(amountInEth) * 1e18))).toString();
@@ -92,7 +90,8 @@ const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
   }),
 });
 
-const tools = [weatherTool, sendEthTool];
+// Declare tools once and include all tools
+const tools = [weatherTool, sendEthTool, checkBalanceTool];
 const toolNode = new ToolNode(tools);
 
 const model = new ChatAnthropic({
