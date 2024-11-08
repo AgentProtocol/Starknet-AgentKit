@@ -59,7 +59,8 @@ export async function executeSwap(
         ...options,
         executeApprove: true,
         slippage: 0.01
-      }
+      },
+      AVNU_OPTIONS
     );
     
     console.log("✅ Swap executed successfully");
