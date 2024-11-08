@@ -13,6 +13,6 @@
     "esm": true,
     "experimentalSpecifierResolution": "node"
   },
-  "include": ["*.ts"],
+  "include": ["*.ts", "tg_bot/bot.ts"],
   "exclude": ["node_modules"]
 } 

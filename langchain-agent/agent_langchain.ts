@@ -1,4 +1,4 @@
-import * as readline from 'readline';
+import * as readline from "readline";
 
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { tool } from "@langchain/core/tools";
@@ -7,11 +7,43 @@ import { StateGraph } from "@langchain/langgraph";
 import { MemorySaver, Annotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { Account, RpcProvider } from "starknet";
-import { RPC_URL, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from './constants.js';
-import { generateAccount, deployAccount } from './util/wallet.js';
-import { checkBalanceTool } from './check_balance.js';
-import { getNews } from './util/news.js';
-import { ChatOpenAI } from '@langchain/openai';
+import {
+  RPC_URL,
+  STARKNET_ACCOUNT_ADDRESS,
+  STARKNET_PRIVATE_KEY,
+} from "./constants.js";
+import { generateAccount, deployAccount } from "./util/wallet.js";
+import { checkBalanceTool } from "./check_balance.js";
+import { getNews } from "./util/news.js";
+import { ChatOpenAI } from "@langchain/openai";
+
+// TG bot setup start
+import { Telegraf } from "telegraf";
+import { message } from "./tg_bot/filters.js";
+import * as dotenv from "dotenv";
+
+dotenv.config();
+const botToken = process.env.BOT_TOKEN;
+
+if (!botToken) {
+  console.error("No private key defined for the TG bot");
+  process.exit(1); // Exit the program with error code
+}
+const bot = new Telegraf(botToken);
+// Remember, this should ideally be written before `bot.launch()`!
+
+if (!process.env.BOT_TOKEN) {
+  throw new Error("BOT_TOKEN is not set");
+}
+bot.start((ctx) => {
+  return ctx.reply(`Hello ${ctx.update.message.from.first_name}!`);
+});
+
+let reply = "GM GM, Starknet Brother is here to help! 👍";
+
+// bot.on(message("text"), (ctx) => ctx.reply(reply));
+
+// TG bot setup finish
 
 // Starknet account address and private key
 // can be overwritten by the agent if environment variables are not set
@@ -23,20 +55,20 @@ let accountAddress: string | undefined = STARKNET_ACCOUNT_ADDRESS;
 let backgroundActionInterval: NodeJS.Timeout | undefined;
 
 // Alchemy Starknet RPC
-const provider = new RpcProvider({ 
-  nodeUrl: RPC_URL
+const provider = new RpcProvider({
+  nodeUrl: RPC_URL,
 });
 
 // ETH token address on Starknet Sepolia
-const ETH_TOKEN_ADDRESS = "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
-
+const ETH_TOKEN_ADDRESS =
+  "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
 
 // Define the graph state
 const StateAnnotation = Annotation.Root({
   messages: Annotation<BaseMessage[]>({
     reducer: (x, y) => x.concat(y),
-  })
-})
+  }),
+});
 
 // Define the tools for the agent to use
 
@@ -45,69 +77,82 @@ const StateAnnotation = Annotation.Root({
 // Prompts user for confirmation before sending
 // Returns transaction hash and Starkscan link on success
 // Handles errors and returns error messages on failure
-const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
-  try {
+const sendEthTool = tool(
+  async ({ recipientAddress, amountInEth }) => {
+    try {
+      const account = await getAccount();
 
-    const account = await getAccount();
+      if (!account) {
+        return "Transaction cancelled by user.";
+      }
 
-    if (!account) {
-      return "Transaction cancelled by user.";
-    }
+      // Get confirmation before proceeding
+      const confirmation = await new Promise<string>((resolve) => {
+        rl.question(
+          `Do you want to send ${amountInEth} ETH to ${recipientAddress} on Sepolia? (yes/no): `,
+          resolve
+        );
+      });
 
-    // Get confirmation before proceeding
-    const confirmation = await new Promise<string>((resolve) => {
-      rl.question(`Do you want to send ${amountInEth} ETH to ${recipientAddress} on Sepolia? (yes/no): `, resolve);
-    });
+      if (confirmation.toLowerCase() !== "yes") {
+        return "Transaction cancelled by user.";
+      }
 
-    if (confirmation.toLowerCase() !== 'yes') {
-      return "Transaction cancelled by user.";
-    }
+      // Convert ETH to wei (ETH * 10^18)
+      const amountInWei = BigInt(
+        Math.floor(parseFloat(amountInEth) * 1e18)
+      ).toString();
 
-    // Convert ETH to wei (ETH * 10^18)
-    const amountInWei = (BigInt(Math.floor(parseFloat(amountInEth) * 1e18))).toString();
+      // ETH transfer call
+      const result = await account.execute({
+        contractAddress: ETH_TOKEN_ADDRESS,
+        entrypoint: "transfer",
+        calldata: [recipientAddress, amountInWei, "0"],
+      });
 
-    // ETH transfer call
-    const result = await account.execute({
-      contractAddress: ETH_TOKEN_ADDRESS,
-      entrypoint: 'transfer',
-      calldata: [recipientAddress, amountInWei, '0'],
-    });
-
-    return `Transaction submitted to Sepolia. Hash: ${result.transaction_hash}
+      return `Transaction submitted to Sepolia. Hash: ${result.transaction_hash}
             View on Starkscan: https://sepolia.starkscan.co/tx/${result.transaction_hash}`;
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      return `Error sending ETH: ${error.message}`;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        return `Error sending ETH: ${error.message}`;
+      }
+      return `Error sending ETH: Unknown error occurred`;
     }
-    return `Error sending ETH: Unknown error occurred`;
+  },
+  {
+    name: "send_eth",
+    description: "Send ETH to an address on Starknet Sepolia testnet",
+    schema: z.object({
+      recipientAddress: z.string().describe("The recipient's Starknet address"),
+      amountInEth: z.string().describe("The amount of ETH to send"),
+    }),
   }
-}, {
-  name: "send_eth",
-  description: "Send ETH to an address on Starknet Sepolia testnet",
-  schema: z.object({
-    recipientAddress: z.string().describe("The recipient's Starknet address"),
-    amountInEth: z.string().describe("The amount of ETH to send"),
-  }),
-});
+);
 
 // Tool to get the current starknet account
-const getCurrentAccountTool = tool(async () => {
-  return accountAddress;
-}, {
-  name: "get_starknet_account",
-  description: "Call to get current starkent account the agent is using."
-});
+const getCurrentAccountTool = tool(
+  async () => {
+    return accountAddress;
+  },
+  {
+    name: "get_starknet_account",
+    description: "Call to get current starkent account the agent is using.",
+  }
+);
 
 // Tool to fetch latest crypto news
 // Makes API call to get current news articles
 // Returns news data as JSON string
 // Used for getting real-time updates on crypto market news and developments
-const getNewsTool = tool(async () => {
-  return JSON.stringify(await getNews());
-}, {
-  name: "get_news",
-  description: "Call to get news."
-});
+const getNewsTool = tool(
+  async () => {
+    return JSON.stringify(await getNews());
+  },
+  {
+    name: "get_news",
+    description: "Call to get news.",
+  }
+);
 
 // Tool to start a periodic background action loop.
 // Sets up an interval to execute a specified action at given frequency.
@@ -117,53 +162,68 @@ const getNewsTool = tool(async () => {
 //   - Restores the command prompt
 // If a previous loop exists, stops it before starting new one.
 // Returns confirmation message when loop is started.
-const startBackgroundAction = tool(async ({ whatToDo, intervalInSeconds }) => {
-  if (backgroundActionInterval) {
-    clearInterval(backgroundActionInterval);
-    backgroundActionInterval = undefined;
-  }
-  const sumarizeNews = async () => {
-    const message = whatToDo;
+const startBackgroundAction = tool(
+  async ({ whatToDo, intervalInSeconds }) => {
+    if (backgroundActionInterval) {
+      clearInterval(backgroundActionInterval);
+      backgroundActionInterval = undefined;
+    }
+    const sumarizeNews = async () => {
+      const message = whatToDo;
 
-    const finalState = await app.invoke(
-      { messages: [ new HumanMessage(message)] },
-      { configurable: { thread_id: "42" } }
+      const finalState = await app.invoke(
+        { messages: [new HumanMessage(message)] },
+        { configurable: { thread_id: "42" } }
+      );
+      console.log("\n------UPDATE------\n");
+      console.log(finalState.messages[finalState.messages.length - 1].content);
+      console.log("\n-------------------\n");
+
+      // Move the cursor back to the input line
+      readline.cursorTo(process.stdout, 0);
+      readline.clearLine(process.stdout, 1); // Clear the current line
+      rl.prompt(); // Show the prompt again
+    };
+    backgroundActionInterval = await setInterval(
+      sumarizeNews,
+      intervalInSeconds * 1000
     );
-    console.log('\n------UPDATE------\n')
-    console.log(finalState.messages[finalState.messages.length - 1].content);
-    console.log('\n-------------------\n');
-
-    // Move the cursor back to the input line
-    readline.cursorTo(process.stdout, 0);
-    readline.clearLine(process.stdout, 1); // Clear the current line
-    rl.prompt(); // Show the prompt again
+    return "Started.";
+  },
+  {
+    name: "start_background_action",
+    description:
+      "Call to start a loop that executes an action every X seconds. Or stop the current loop and start a new one.",
+    schema: z.object({
+      whatToDo: z
+        .string()
+        .describe("The action that you want to execute every X second."),
+      intervalInSeconds: z
+        .number()
+        .describe(
+          "The number of seconds that needs to pass before the news are fetched again."
+        ),
+    }),
   }
-  backgroundActionInterval = await setInterval(sumarizeNews, intervalInSeconds * 1000);
-  return "Started.";
-}, {
-  name: "start_background_action",
-  description: "Call to start a loop that executes an action every X seconds. Or stop the current loop and start a new one.",
-  schema: z.object({
-    whatToDo: z.string().describe("The action that you want to execute every X second."),
-    intervalInSeconds: z.number().describe("The number of seconds that needs to pass before the news are fetched again."),
-  }),
-});
-
+);
 
 // Tool to stop a background action loop.
 // Checks if an interval is currently running.
 // If running, clears the interval and resets the interval ID.
 // Returns confirmation message when loop is stopped.
-const stopBackgroundAction = tool(async () => {
-  if (backgroundActionInterval) {
-    clearInterval(backgroundActionInterval);
-    backgroundActionInterval = undefined;
+const stopBackgroundAction = tool(
+  async () => {
+    if (backgroundActionInterval) {
+      clearInterval(backgroundActionInterval);
+      backgroundActionInterval = undefined;
+    }
+    return "Stopped.";
+  },
+  {
+    name: "stop_background_action",
+    description: "Call to end a loop that executes an action every X seconds.",
   }
-  return "Stopped.";
-}, {
-  name: "stop_background_action",
-  description: "Call to end a loop that executes an action every X seconds."
-});
+);
 
 // Get a starknet account or generate a new one
 const getAccount = async () => {
@@ -172,20 +232,30 @@ const getAccount = async () => {
   }
 
   const creationConfirmation = await new Promise<string>((resolve) => {
-    rl.question(`To execute onchain transactions we need a funded account. Do you want to deploy a new account? (yes/no): `, resolve);
-  })
+    rl.question(
+      `To execute onchain transactions we need a funded account. Do you want to deploy a new account? (yes/no): `,
+      resolve
+    );
+  });
 
-  if (creationConfirmation.toLowerCase() !== 'yes') {
+  if (creationConfirmation.toLowerCase() !== "yes") {
     return;
   }
 
-  const { privateKey: newPrivateKey, starkKeyPub, OZcontractAddress } = await generateAccount();
+  const {
+    privateKey: newPrivateKey,
+    starkKeyPub,
+    OZcontractAddress,
+  } = await generateAccount();
 
   const fundingConfirmation = await new Promise<string>((resolve) => {
-    rl.question(`Alright, here is the new account address: ${OZcontractAddress}. Please send some funds to it using the faucet: https://starknet-faucet.vercel.app . Let me know when you're done (yes/no): `, resolve);
-  })
+    rl.question(
+      `Alright, here is the new account address: ${OZcontractAddress}. Please send some funds to it using the faucet: https://starknet-faucet.vercel.app . Let me know when you're done (yes/no): `,
+      resolve
+    );
+  });
 
-  if (fundingConfirmation.toLowerCase() !== 'yes') {
+  if (fundingConfirmation.toLowerCase() !== "yes") {
     return;
   }
 
@@ -195,11 +265,17 @@ const getAccount = async () => {
   accountAddress = OZcontractAddress;
 
   return new Account(provider, accountAddress, privateKey);
-}
-
+};
 
 // Declare tools once and include all tools
-const tools = [sendEthTool, checkBalanceTool, startBackgroundAction, stopBackgroundAction, getNewsTool, getCurrentAccountTool];
+const tools = [
+  sendEthTool,
+  checkBalanceTool,
+  startBackgroundAction,
+  stopBackgroundAction,
+  getNewsTool,
+  getCurrentAccountTool,
+];
 const toolNode = new ToolNode(tools);
 
 const model = new ChatOpenAI({
@@ -235,32 +311,51 @@ const app = workflow.compile({ checkpointer });
 
 const rl = readline.createInterface({
   input: process.stdin,
-  output: process.stdout
+  output: process.stdout,
 });
 
-async function askQuestion() {
-  while (true) {
-    const question = await new Promise<string>((resolve) => {
-      rl.question('Ask a question (or type "exit" to quit): ', resolve);
-    });
+bot.on(message("text"), async (ctx) => {
+  ctx.reply(
+    "Cool idea, lemme think about it, will be right back with a reply 👍"
+  );
 
-    if (question.toLowerCase() === 'exit') {
-      if (backgroundActionInterval) {
-        clearInterval(backgroundActionInterval);
-        backgroundActionInterval = undefined;
-      }
-      rl.close();
-      break;
-    }
+  const finalState = await app.invoke(
+    { messages: [new HumanMessage(ctx.message.text)] },
+    { configurable: { thread_id: "42" } }
+  );
+  // response of the agent
+  console.log(finalState.messages[finalState.messages.length - 1].content);
+  ctx.reply(finalState.messages[finalState.messages.length - 1].content);
+});
 
-    const finalState = await app.invoke(
-      { messages: [new HumanMessage(question)] },
-      { configurable: { thread_id: "42" } }
-    );
+// async function askQuestion() {
+//   while (true) {
+//     const question = await new Promise<string>((resolve) => {
+//       rl.question('Ask a question (or type "exit" to quit): ', resolve);
 
-    console.log(finalState.messages[finalState.messages.length - 1].content);
-    console.log('\n-------------------\n');
-  }
-}
+//       bot.on(message("sticker"), (ctx) => ctx.reply("Cool pic 👍"));
 
-askQuestion();
+//       console.log(message);
+//     });
+
+//     if (question.toLowerCase() === "exit") {
+//       if (backgroundActionInterval) {
+//         clearInterval(backgroundActionInterval);
+//         backgroundActionInterval = undefined;
+//       }
+//       rl.close();
+//       break;
+//     }
+
+//     const finalState = await app.invoke(
+//       { messages: [new HumanMessage(question)] },
+//       { configurable: { thread_id: "42" } }
+//     );
+//     // response of the agent
+//     console.log(finalState.messages[finalState.messages.length - 1].content);
+//     console.log("\n-------------------\n");
+//   }
+// }
+
+// askQuestion();
+bot.launch();
