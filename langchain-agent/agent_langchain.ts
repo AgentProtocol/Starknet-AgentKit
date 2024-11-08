@@ -90,6 +90,14 @@ const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
   }),
 });
 
+// Tool to get the current starknet account
+const getCurrentAccountTool = tool(async () => {
+  return accountAddress;
+}, {
+  name: "get_starknet_account",
+  description: "Call to get current starkent account the agent is using."
+});
+
 // Tool to fetch latest crypto news
 // Makes API call to get current news articles
 // Returns news data as JSON string
@@ -191,7 +199,7 @@ const getAccount = async () => {
 
 
 // Declare tools once and include all tools
-const tools = [sendEthTool, checkBalanceTool, startBackgroundAction, stopBackgroundAction, getNewsTool];
+const tools = [sendEthTool, checkBalanceTool, startBackgroundAction, stopBackgroundAction, getNewsTool, getCurrentAccountTool];
 const toolNode = new ToolNode(tools);
 
 const model = new ChatOpenAI({

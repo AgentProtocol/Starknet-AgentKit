@@ -1,11 +1,12 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { Provider, Call, validateAndParseAddress, RpcProvider } from 'starknet';
+import { Call, RpcProvider } from 'starknet';
 import { toBigInt } from 'ethers';
+import { RPC_URL } from "./constants.js";
 
 // Create provider
 export const provider = new RpcProvider({ 
-    nodeUrl: "https://starknet-sepolia.g.alchemy.com/starknet/version/rpc/v0_7/UiB8n0FBudlTFaqo7pwvNci7e8JzZS9P"
+    nodeUrl: RPC_URL
 });
 
 // Token addresses
