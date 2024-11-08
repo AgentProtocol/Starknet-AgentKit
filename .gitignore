@@ -15,3 +15,6 @@ build/
 # Logs
 *.log
 npm-debug.log* 
+
+# Storage
+my_storage/

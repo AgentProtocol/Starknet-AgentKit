@@ -1,5 +1,6 @@
 import { Account, constants, ec, json, stark, RpcProvider, hash, CallData } from 'starknet';
-import { RPC_URL } from '../constants.js';
+import { RPC_URL, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from '../constants.js';
+import { readFromStorage } from './storage.js';
 // connect provider (Mainnet or Sepolia)
 const provider = new RpcProvider({ nodeUrl: `${RPC_URL}` });
 
@@ -30,11 +31,31 @@ export const generateAccount = () => {
 export const deployAccount = async (privateKey: string, starkKeyPub: string, OZcontractAddress: string) => {
   const OZaccount = new Account(provider, OZcontractAddress, privateKey);
 
-  const { transaction_hash, contract_address } = await OZaccount.deployAccount({
+  const { transaction_hash } = await OZaccount.deployAccount({
     classHash: OZaccountClassHash,
     constructorCalldata: CallData.compile({ publicKey: starkKeyPub }),
     addressSalt: starkKeyPub,
   });
 
   await provider.waitForTransaction(transaction_hash);
+}
+
+
+// Get a starknet account or generate a new one
+export const getAccount = async () => {
+  // check if account is set in env
+  if (STARKNET_ACCOUNT_ADDRESS && STARKNET_PRIVATE_KEY) {
+    return new Account(provider, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY);
+  }
+
+  // check if account exists in storage
+  const storedAccountAddress = await readFromStorage('accountAddress');
+  const storedPrivateKey = await readFromStorage('privateKey');
+
+  if (storedPrivateKey && storedPrivateKey) {
+    return new Account(provider, storedAccountAddress, storedPrivateKey);
+  } 
+
+  // account does not exist
+  return;
 }
