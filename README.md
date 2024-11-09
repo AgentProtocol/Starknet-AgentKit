@@ -55,3 +55,44 @@ The template is built with LangChain's state management and tool system, making 
 
 ### Adding New Tools
 Create new tools in `tools/` following the existing pattern:
+
+```typescript
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
+
+export const myNewTool = tool(
+  async ({ param1, param2 }, options) => {
+    // Tool implementation
+  },
+  {
+    name: "my_new_tool",
+    description: "Description of what the tool does",
+    schema: z.object({
+      param1: z.string().describe("Description of param1"),
+      param2: z.number().describe("Description of param2"),
+    }),
+  }
+);
+```
+
+Then add it to `tools/index.ts` and register in `agent.ts`.
+
+### Project Structure
+
+```
+├── langchain-agent/
+│   ├── tools/
+│   │   ├── account/      # Account management tools
+│   │   ├── monitoring/   # Blockchain monitoring tools
+│   │   ├── token/        # Token interaction tools
+│   │   └── transactions/ # Transaction execution tools
+│   ├── agent.ts          # Main agent logic
+│   └── constants.ts      # Configuration constants
+```
+
+### Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Submit a pull request
