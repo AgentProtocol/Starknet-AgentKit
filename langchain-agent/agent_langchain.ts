@@ -41,7 +41,7 @@ import { readFromStorage, saveToStorage } from './util/storage.js';
 
 // Interval ID for background tasks
 // Notice: this is just POC, should not be used in prod
-let backgroundActionIntervals: Record<string, NodeJS.Timeout | undefined>;
+let backgroundActionIntervals: Record<string, NodeJS.Timeout | undefined> = {};
 
 // ETH token address on Starknet Sepolia
 const ETH_TOKEN_ADDRESS =
@@ -63,24 +63,13 @@ const StateAnnotation = Annotation.Root({
 // Returns transaction hash and Starkscan link on success
 // Handles errors and returns error messages on failure
 const sendEthTool = tool(
-  async ({ recipientAddress, amountInEth }) => {
+  async ({ recipientAddress, amountInEth }, options) => {
     try {
-      const account = await getAccount();
+      const chatId = options.metadata.thread_id;
+      const account = await getAccount(chatId);
 
       if (!account) {
         return "Account does not exist, you need to create one first.";
-      }
-
-      // Get confirmation before proceeding
-      const confirmation = await new Promise<string>((resolve) => {
-        rl.question(
-          `Do you want to send ${amountInEth} ETH to ${recipientAddress} on Sepolia? (yes/no): `,
-          resolve
-        );
-      });
-
-      if (confirmation.toLowerCase() !== "yes") {
-        return "Transaction cancelled by user.";
       }
 
       // Convert ETH to wei (ETH * 10^18)
@@ -115,8 +104,9 @@ const sendEthTool = tool(
 );
 
 // Tool to get the current Starknet account address
-const getCurrentAccountTool = tool(async () => {
-  const account = await getAccount();
+const getCurrentAccountTool = tool(async ({}, options) => {
+  const chatId = options.metadata.thread_id;
+  const account = await getAccount(chatId);
   if (!account) {
     return 'Account does not exist, you need to create one first.';
   }
@@ -131,22 +121,23 @@ const getCurrentAccountTool = tool(async () => {
 // Uses private key from storage to deploy the account contract
 // Saves the deployed account credentials to storage
 // Returns the deployed account address
-const deployStarknetAccountTool = tool(async () => {
+const deployStarknetAccountTool = tool(async ({}, options) => {
   if (STARKNET_ACCOUNT_ADDRESS && STARKNET_PRIVATE_KEY) {
     return 'The account is set in the env and cannot be changed.'
   }
 
-  const privateKey = await readFromStorage('generatedAccountPrivateKey');
+  const chatId = options.metadata.thread_id;
+  const privateKey = await readFromStorage(`${chatId}:generatedAccountPrivateKey`);
 
   const { OZcontractAddress } = await deployAccount(privateKey);
 
-  await saveToStorage('privateKey', privateKey);
-  await saveToStorage('accountAddress', OZcontractAddress);
+  await saveToStorage(`${chatId}:privateKey`, privateKey);
+  await saveToStorage(`${chatId}:accountAddress`, OZcontractAddress);
 
   return `Account deployed. Address: ${OZcontractAddress}`;
 }, {
   name: "deploy_starknet_account",
-  description: `Deploys the Starknet account / wallet after the user has funded it.
+  description: `Deploys the Starknet account / wallet.
   If wallet already exists, it will overwrite it.
   This is the last step in account creation.`
 })
@@ -155,13 +146,14 @@ const deployStarknetAccountTool = tool(async () => {
 // Creates new account credentials but does not deploy the contract
 // Saves private key to storage for later deployment
 // Returns the account address for funding
-const generateStarknetAccountTool = tool(async () => {
+const generateStarknetAccountTool = tool(async ({}, options) => {
   if (STARKNET_ACCOUNT_ADDRESS && STARKNET_PRIVATE_KEY) {
     return 'The account is set in the env and cannot be changed.'
   }
   const { privateKey: newPrivateKey, OZcontractAddress } = await generateAccount();
 
-  await saveToStorage('generatedAccountPrivateKey', newPrivateKey);
+  const chatId = options.metadata.thread_id
+  await saveToStorage(`${chatId}:generatedAccountPrivateKey`, newPrivateKey);
 
   return `Here is the new account address: ${OZcontractAddress} . Please send some funds to it using the faucet: https://starknet-faucet.vercel.app . Let me know when you're done and I will deploy the account.`;
 }, {

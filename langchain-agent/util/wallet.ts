@@ -50,15 +50,15 @@ export const deployAccount = async (privateKey: string) => {
 
 
 // Get a starknet account or generate a new one
-export const getAccount = async () => {
+export const getAccount = async (chatId: string) => {
   // check if account is set in env
   if (STARKNET_ACCOUNT_ADDRESS && STARKNET_PRIVATE_KEY) {
     return new Account(provider, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY);
   }
 
   // check if account exists in storage
-  const storedAccountAddress = await readFromStorage('accountAddress');
-  const storedPrivateKey = await readFromStorage('privateKey');
+  const storedAccountAddress = await readFromStorage(`${chatId}:accountAddress`);
+  const storedPrivateKey = await readFromStorage(`${chatId}:privateKey`);
 
   if (storedPrivateKey && storedPrivateKey) {
     return new Account(provider, storedAccountAddress, storedPrivateKey);
