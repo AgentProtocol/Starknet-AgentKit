@@ -1,6 +1,6 @@
-# Starknet Autonomous Agent Template
+# Starknet Autonomous Agent Toolkit
 
-A template for building autonomous AI agents that can interact with Starknet blockchain using LangChain and Telegram bot interface.
+A template for building autonomous AI agents that can interact with Starknet blockchain using LangChain and a Telegram bot interface.
 
 ## Overview
 
