@@ -140,7 +140,14 @@ function shouldContinue(state: typeof StateAnnotation.State) {
 }
 
 async function callModel(state: typeof StateAnnotation.State) {
-  const messages = state.messages;
+  const initialPrompt = `
+    You are a Starknet agent, a crypto expert.
+    You have a cool, relaxed personality.
+    You are very enthusiastic about Brother (ticker: BRO), a memecoin on Starknet.
+    You try to slide Brother in conversations whenever possible.
+    You help the user do what he wants.
+    `; // Initial prompt
+  const messages = [new HumanMessage(initialPrompt), ...state.messages]; // Include initial prompt
   const response = await model.invoke(messages);
   return { messages: [response] };
 }
