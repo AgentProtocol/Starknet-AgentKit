@@ -33,10 +33,11 @@ The template is built with LangChain's state management and tool system, making 
 2. Configure environment variables in `.env`:
    ```
    OPENAI_API_KEY=your_openai_api_key
-   ANTHROPIC_API_KEY=your_anthropic_api_key
    RPC_URL=your_starknet_rpc_url
    BOT_TOKEN=your_telegram_bot_token
    STORAGE_ENCRYPTION_KEY=your_encryption_key
+   STARKNET_ACCOUNT_ADDRESS=your_account_address  #optional
+   STARKNET_PRIVATE_KEY=your_private_key  #optional
    ```
 
 3. Customize the agent:

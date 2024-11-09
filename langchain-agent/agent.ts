@@ -128,7 +128,7 @@ const toolNode = new ToolNode(tools);
 // Initialize language model
 // Customize model parameters here
 const model = new ChatOpenAI({
-  model: "gpt-4-0125-preview", // Change model as needed
+  model: "gpt-4o-mini", // Change model as needed
   temperature: 0,
 }).bindTools(tools);
 
