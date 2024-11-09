@@ -12,6 +12,15 @@ import { generateAccount, deployAccount } from './util/wallet.js';
 import { checkBalanceTool } from './check_balance.js';
 import { getNews } from './util/news.js';
 import { ChatOpenAI } from '@langchain/openai';
+import { 
+  executeSwap, 
+  getQuote, 
+  type ExecuteSwapOptions, 
+  type Quote,
+  ETH_ADDRESS,
+  STRK_ADDRESS
+} from './swap.js';
+import { formatUnits } from "ethers";
 
 // Starknet account address and private key
 // can be overwritten by the agent if environment variables are not set
@@ -90,6 +99,59 @@ const sendEthTool = tool(async ({ recipientAddress, amountInEth }) => {
   }),
 });
 
+// Define the input type for the swap function
+interface SwapInput {
+  tokenInAddress: string;
+  tokenOutAddress: string;
+  amountIn: string;
+}
+
+// Define the swap function
+const swapTool = tool(
+  async (input: { tokenInAddress: string; tokenOutAddress: string; amountIn: string }) => {
+    try {
+      const normalizedTokenIn = input.tokenInAddress.toLowerCase() === 'eth' 
+        ? ETH_ADDRESS 
+        : input.tokenInAddress.toLowerCase() === 'strk'
+          ? STRK_ADDRESS
+          : input.tokenInAddress;
+
+      const normalizedTokenOut = input.tokenOutAddress.toLowerCase() === 'eth'
+        ? ETH_ADDRESS
+        : input.tokenOutAddress.toLowerCase() === 'strk'
+          ? STRK_ADDRESS
+          : input.tokenOutAddress;
+
+      const account = await getAccount();
+      if (!account) {
+        return "Transaction cancelled by user.";
+      }
+
+      const quote = await getQuote(normalizedTokenIn, normalizedTokenOut, input.amountIn);
+      const expectedOutput = formatUnits(quote.buyAmount, 18);
+      
+      const result = await executeSwap(account, quote, {
+        executeApprove: true,
+        slippage: 0.01
+      });
+
+      return `✅ Swap executed successfully! You will receive ${expectedOutput} ${input.tokenOutAddress.toUpperCase()}. Transaction hash: ${result.transactionHash}`;
+    } catch (error) {
+      console.error("Error in swap:", error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      return `Failed to execute swap: ${errorMessage}. Please try again with a different amount or check your balance.`;
+    }
+  },
+  {
+    name: "swap",
+    description: "Swap tokens on Starknet",
+    schema: z.object({
+      tokenInAddress: z.string().describe("The address of the token to swap from"),
+      tokenOutAddress: z.string().describe("The address of the token to swap to"),
+      amountIn: z.string().describe("The amount of tokens to swap")
+    })
+  }
+);
 // Tool to get the current starknet account
 const getCurrentAccountTool = tool(async () => {
   return accountAddress;
@@ -199,7 +261,7 @@ const getAccount = async () => {
 
 
 // Declare tools once and include all tools
-const tools = [sendEthTool, checkBalanceTool, startBackgroundAction, stopBackgroundAction, getNewsTool, getCurrentAccountTool];
+const tools = [sendEthTool, checkBalanceTool, swapTool, startBackgroundAction, stopBackgroundAction, getNewsTool, getCurrentAccountTool];
 const toolNode = new ToolNode(tools);
 
 const model = new ChatOpenAI({
