@@ -6,9 +6,7 @@ import { z } from "zod";
 import { StateGraph } from "@langchain/langgraph";
 import { MemorySaver, Annotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
-import { RpcProvider } from "starknet";
 import {
-  RPC_URL,
   STARKNET_ACCOUNT_ADDRESS,
   STARKNET_PRIVATE_KEY,
 } from "./constants.js";
@@ -38,18 +36,12 @@ bot.start((ctx) => {
   return ctx.reply(`Hello ${ctx.update.message.from.first_name}!`);
 });
 
-let reply = "GM GM, Starknet Brother is here to help! 👍";
-
 // Telegram bot setup finish
 import { readFromStorage, saveToStorage } from './util/storage.js';
 
 // Interval ID for background tasks
-let backgroundActionInterval: NodeJS.Timeout | undefined;
-
-// Initialize Starknet provider with RPC URL
-const provider = new RpcProvider({
-  nodeUrl: RPC_URL,
-});
+// Notice: this is just POC, should not be used in prod
+let backgroundActionIntervals: Record<string, NodeJS.Timeout | undefined>;
 
 // ETH token address on Starknet Sepolia
 const ETH_TOKEN_ADDRESS =
@@ -198,10 +190,10 @@ const getNewsTool = tool(
 const startBackgroundAction = tool(
   async ({ whatToDo, intervalInSeconds }, options) => {
     const chatId = options.metadata.thread_id;
-    
-    if (backgroundActionInterval) {
-      clearInterval(backgroundActionInterval);
-      backgroundActionInterval = undefined;
+
+    if (backgroundActionIntervals[chatId]) {
+      clearInterval(backgroundActionIntervals[chatId]);
+      backgroundActionIntervals[chatId] = undefined;
     }
     const doAction = async () => {
       const message = whatToDo;
@@ -221,7 +213,7 @@ const startBackgroundAction = tool(
       readline.clearLine(process.stdout, 1); // Clear the current line
       rl.prompt(); // Show the prompt again
     };
-    backgroundActionInterval = await setInterval(
+    backgroundActionIntervals[chatId] = await setInterval(
       doAction,
       intervalInSeconds * 1000
     );
@@ -245,10 +237,11 @@ const startBackgroundAction = tool(
 );
 
 // Tool to stop the current background action
-const stopBackgroundAction = tool(async () => {
-  if (backgroundActionInterval) {
-    clearInterval(backgroundActionInterval);
-    backgroundActionInterval = undefined;
+const stopBackgroundAction = tool(async ({}, options) => {
+  const chatId = options.metadata.thread_id;
+  if (backgroundActionIntervals[chatId]) {
+    clearInterval(backgroundActionIntervals[chatId]);
+    backgroundActionIntervals[chatId] = undefined;
   }
   return "Stopped.";
 }, {
