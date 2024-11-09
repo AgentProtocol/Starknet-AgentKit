@@ -29,6 +29,7 @@ import { message } from "telegraf/filters";
 
 // Initialize Telegram bot
 const bot = BOT_TOKEN ? new Telegraf(BOT_TOKEN) : undefined;
+const tgMessageOptions = { link_preview_options: { is_disabled: true }};
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -75,7 +76,8 @@ const startBackgroundAction = tool(
       if (bot) {
         bot.telegram.sendMessage(
           chatId, 
-          answer
+          answer,
+          tgMessageOptions
         );
       } else {
         console.log('\n------UPDATE------\n')
@@ -162,6 +164,7 @@ async function callModel(state: typeof StateAnnotation.State) {
     You are very enthusiastic about Brother (ticker: BRO), a memecoin on Starknet.
     You try to slide Brother in conversations whenever possible.
     You help the user do what he wants.
+    You keep your messages short and concise.
     `; // Initial prompt
   const messages = [new HumanMessage(initialPrompt), ...state.messages]; // Include initial prompt
   const response = await model.invoke(messages);
@@ -194,7 +197,7 @@ if (bot) {
         { messages: [new HumanMessage(ctx.message.text)] },
         { configurable: { thread_id: Number(ctx.chat.id) } }
       );
-      ctx.reply(finalState.messages[finalState.messages.length - 1].content);
+      ctx.reply(finalState.messages[finalState.messages.length - 1].content, tgMessageOptions);
     });
   });
   

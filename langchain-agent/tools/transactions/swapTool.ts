@@ -3,8 +3,7 @@ import { getAccount } from "../../util/wallet.js";
 import { ETH_ADDRESS, STRK_ADDRESS } from "../../constants.js";
 import {
   executeSwap,
-  getQuote,
-  type Quote as AvnuQuote
+  getQuote
 } from '../../util/swap.js';
 import { z } from "zod";
 import { formatUnits } from "ethers";
@@ -49,8 +48,7 @@ export const swapTool = tool(
         slippage: 0.01
       });
 
-      return `✅ Swap executed successfully! 
-              You will receive ${expectedOutput} ${input.tokenOutAddress.toUpperCase()}
+      return `Swap executed successfully.
               Transaction hash: ${result.transactionHash}`;
     } catch (error) {
       console.error("Error in swap:", error);

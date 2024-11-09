@@ -39,8 +39,9 @@ export const sendTokenTool = tool(async ({ token, recipientAddress, amount }, op
       calldata: [recipientAddress, amountInWei, '0'],
     });
 
-    return `Transaction submitted to Sepolia. Hash: ${result.transaction_hash}
-            View on Starkscan: https://sepolia.starkscan.co/tx/${result.transaction_hash}`;
+    return `Transaction successfull.
+            Transaction hash: ${result.transaction_hash}
+            Starkscan link: https://sepolia.starkscan.co/tx/${result.transaction_hash}`;
   } catch (error: unknown) {
     if (error instanceof Error) {
       return `Error sending ${token}: ${error.message}`;
