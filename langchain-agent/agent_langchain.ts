@@ -112,17 +112,16 @@ const sendEthTool = tool(
   }
 );
 
-// Define the input type for the swap function
-interface SwapInput {
-  tokenInAddress: string;
-  tokenOutAddress: string;
-  amountIn: string;
-}
-
 // Define the swap function
 const swapTool = tool(
-  async (input: { tokenInAddress: string; tokenOutAddress: string; amountIn: string }) => {
+  async (input: { tokenInAddress: string; tokenOutAddress: string; amountIn: string }, options) => {
     try {
+      const chatId = options.metadata.thread_id;
+      const account = await getAccount(chatId);
+      if (!account) {
+        return "Account does not exist, you need to create one first.";
+      }
+
       const normalizedTokenIn = input.tokenInAddress.toLowerCase() === 'eth' 
         ? ETH_ADDRESS 
         : input.tokenInAddress.toLowerCase() === 'strk'
@@ -134,11 +133,6 @@ const swapTool = tool(
         : input.tokenOutAddress.toLowerCase() === 'strk'
           ? STRK_ADDRESS
           : input.tokenOutAddress;
-
-      const account = await getAccount();
-      if (!account) {
-        return "Transaction cancelled by user.";
-      }
 
       const quote = await getQuote(normalizedTokenIn, normalizedTokenOut, input.amountIn);
       const expectedOutput = formatUnits(quote.buyAmount, 18);
@@ -312,7 +306,8 @@ const tools = [
   getNewsTool,
   getCurrentAccountTool,
   generateStarknetAccountTool,
-  deployStarknetAccountTool
+  deployStarknetAccountTool,
+  swapTool
 ];
 const toolNode = new ToolNode(tools);
 
