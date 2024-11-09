@@ -1,5 +1,4 @@
 import * as readline from "readline";
-
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
@@ -7,8 +6,11 @@ import { StateGraph } from "@langchain/langgraph";
 import { MemorySaver, Annotation } from "@langchain/langgraph";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import {
+  BOT_TOKEN,
+  ETH_ADDRESS,
   STARKNET_ACCOUNT_ADDRESS,
   STARKNET_PRIVATE_KEY,
+  STRK_ADDRESS,
 } from "./constants.js";
 import { generateAccount, deployAccount, getAccount } from "./util/wallet.js";
 import { checkBalanceTool } from "./check_balance.js";
@@ -16,11 +18,7 @@ import { getNews } from "./util/news.js";
 import { ChatOpenAI } from "@langchain/openai";
 import { 
   executeSwap, 
-  getQuote, 
-  type ExecuteSwapOptions, 
-  type Quote,
-  ETH_ADDRESS,
-  STRK_ADDRESS
+  getQuote
 } from './swap.js';
 import { formatUnits } from "ethers";
 
@@ -29,16 +27,14 @@ import { Telegraf } from "telegraf";
 import { message } from "./tg_bot/filters.js";
 import * as dotenv from "dotenv";
 
-dotenv.config();
-const botToken = process.env.BOT_TOKEN;
 
-if (!botToken) {
+if (!BOT_TOKEN) {
   console.error("No private key defined for the TG bot");
   process.exit(1); // Exit the program with error code
 }
-const bot = new Telegraf(botToken);
+const bot = new Telegraf(BOT_TOKEN);
 
-if (!process.env.BOT_TOKEN) {
+if (!BOT_TOKEN) {
   throw new Error("BOT_TOKEN is not set");
 }
 bot.start((ctx) => {
