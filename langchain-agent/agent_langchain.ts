@@ -292,12 +292,17 @@ const rl = readline.createInterface({
 
 bot.on(message("text"), async (ctx) => {
   if (!ctx.chat.id) return;
-  const finalState = await app.invoke(
-    { messages: [new HumanMessage(ctx.message.text)] },
-    { configurable: { thread_id: Number(ctx.chat.id) } }
-  );
-  // response of the agent
-  ctx.reply(finalState.messages[finalState.messages.length - 1].content);
+
+  // Indicate to the user that the agent is typing
+  await ctx.persistentChatAction("typing", async () => {
+    // Process user message and generate AI response
+    const finalState = await app.invoke(
+      { messages: [new HumanMessage(ctx.message.text)] },
+      { configurable: { thread_id: Number(ctx.chat.id) } }
+    );
+    // Send the response
+    ctx.reply(finalState.messages[finalState.messages.length - 1].content);
+  });
 });
 
 // async function askQuestion() {
