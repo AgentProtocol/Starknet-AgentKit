@@ -84,14 +84,14 @@ Then add it to `tools/index.ts` and register in `agent.ts`.
 ### Project Structure
 
 ```
-├── langchain-agent/
-│   ├── tools/
-│   │   ├── account/      # Account management tools
-│   │   ├── monitoring/   # Blockchain monitoring tools
-│   │   ├── token/        # Token interaction tools
-│   │   └── transactions/ # Transaction execution tools
-│   ├── agent.ts          # Main agent logic
-│   └── constants.ts      # Configuration constants
+├── tools/
+│   ├── account/      # Account management tools
+│   ├── monitoring/   # Blockchain monitoring tools
+│   ├── token/        # Token interaction tools
+│   └── transactions/ # Transaction execution tools
+├── util/            # Utility functions
+├── agent.ts          # Main agent logic
+└── constants.ts      # Configuration constants
 ```
 
 ### Contributing
