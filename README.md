@@ -55,7 +55,7 @@ The template is built with LangChain's state management and tool system, making 
    npm dev
    ```
 
-### Try asking it the following:
+5. Try asking it the following:
 - "What is my account token balance?"
 - "Send ETH to a random Starknet account"
 - "Swap ETH to STRK"
