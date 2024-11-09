@@ -1,5 +1,5 @@
 import * as dotenv from 'dotenv';
-dotenv.config({ path: '../.env' });
+dotenv.config();
 
 export const STARKNET_ACCOUNT_ADDRESS = process.env.STARKNET_ACCOUNT_ADDRESS;
 export const STARKNET_PRIVATE_KEY = process.env.STARKNET_PRIVATE_KEY;
