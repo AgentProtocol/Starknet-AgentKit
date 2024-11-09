@@ -8,6 +8,7 @@ import { BOT_TOKEN } from "./constants.js";
 import { ChatOpenAI } from "@langchain/openai";
 import { Telegraf } from "telegraf";
 import { message } from "./tg_bot/filters.js";
+import * as readline from "readline";
 
 // Import tools
 import { 
@@ -27,11 +28,12 @@ import {
  */
 
 // Initialize Telegram bot
-if (!BOT_TOKEN) {
-  console.error("No private key defined for the TG bot");
-  process.exit(1);
-}
-const bot = new Telegraf(BOT_TOKEN);
+const bot = BOT_TOKEN ? new Telegraf(BOT_TOKEN) : undefined;
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
 
 // Background task management
 // Note: This is a basic implementation - should be replaced with proper task management in production
@@ -67,10 +69,24 @@ const startBackgroundAction = tool(
         { messages: [new HumanMessage(whatToDo)] },
         { configurable: { thread_id: Number(chatId) } }
       );
-      bot.telegram.sendMessage(
-        chatId, 
-        finalState.messages[finalState.messages.length - 1].content
-      );
+
+      const answer = finalState.messages[finalState.messages.length - 1].content;
+
+      if (bot) {
+        bot.telegram.sendMessage(
+          chatId, 
+          answer
+        );
+      } else {
+        console.log('\n------UPDATE------\n')
+        console.log(answer);
+        console.log('\n-------------------\n');
+        // Move the cursor back to the input line
+        readline.cursorTo(process.stdout, 0);
+        readline.clearLine(process.stdout, 1); // Clear the current line
+        rl.prompt(); // Show the prompt again
+      }
+
     };
 
     // Start new interval
@@ -168,18 +184,46 @@ const app = workflow.compile({ checkpointer });
  * Configure how the agent interacts with users
  */
 
-// Handle incoming messages
-bot.on(message("text"), async (ctx) => {
-  if (!ctx.chat.id) return;
-
-  await ctx.persistentChatAction("typing", async () => {
-    const finalState = await app.invoke(
-      { messages: [new HumanMessage(ctx.message.text)] },
-      { configurable: { thread_id: Number(ctx.chat.id) } }
-    );
-    ctx.reply(finalState.messages[finalState.messages.length - 1].content);
+if (bot) {
+  // Handle incoming messages
+  bot.on(message("text"), async (ctx) => {
+    if (!ctx.chat.id) return;
+  
+    await ctx.persistentChatAction("typing", async () => {
+      const finalState = await app.invoke(
+        { messages: [new HumanMessage(ctx.message.text)] },
+        { configurable: { thread_id: Number(ctx.chat.id) } }
+      );
+      ctx.reply(finalState.messages[finalState.messages.length - 1].content);
+    });
   });
-});
+  
+  // Launch bot
+  bot.launch();
+} else {
 
-// Launch bot
-bot.launch();
+  // Use cli in DEV
+  async function askQuestion() {
+    while (true) {
+      const question = await new Promise<string>((resolve) => {
+        rl.question('Ask a question (or type "exit" to quit): ', resolve);
+      });
+      if (question.toLowerCase() === "exit") {
+        // Clear all background intervals
+        Object.values(backgroundActionIntervals).forEach(clearInterval);
+        backgroundActionIntervals = {};
+        rl.close();
+        break;
+      }
+      const finalState = await app.invoke(
+        { messages: [new HumanMessage(question)] },
+        { configurable: { thread_id: "42" } }
+      );
+      // response of the agent
+      console.log("\n-------------------\n");
+      console.log(finalState.messages[finalState.messages.length - 1].content);
+      console.log("\n-------------------\n");
+    }
+  }
+  askQuestion();
+}

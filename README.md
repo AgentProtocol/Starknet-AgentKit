@@ -50,6 +50,10 @@ The template is built with LangChain's state management and tool system, making 
    ```bash
    npm start
    ```
+   or to use cli interface instead of Telegram:
+   ```bash
+   npm dev
+   ```
 
 ## Extending the Template
 

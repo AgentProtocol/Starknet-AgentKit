@@ -6,13 +6,15 @@
   "main": "index.js",
   "scripts": {
     "start": "NODE_OPTIONS='--loader ts-node/esm --no-warnings' node agent.ts",
+    "dev": "cross-env DEV=true NODE_OPTIONS='--loader ts-node/esm --no-warnings' node agent.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",
     "@types/node-persist": "^3.1.8",
     "ts-node": "^10.9.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "cross-env": "^7.0.3"
   },
   "dependencies": {
     "@avnu/avnu-sdk": "^2.1.1",
