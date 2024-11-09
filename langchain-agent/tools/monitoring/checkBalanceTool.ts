@@ -2,20 +2,33 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { Call, RpcProvider } from 'starknet';
 import { toBigInt } from 'ethers';
-import { RPC_URL } from "../constants.js";
+import { RPC_URL } from "../../constants.js";
 
-// Create provider
+/**
+ * BALANCE CHECKING CONFIGURATION
+ */
+
+// Initialize Starknet provider
 export const provider = new RpcProvider({ 
     nodeUrl: RPC_URL
 });
 
-// Token addresses
+// Supported token addresses on Starknet Sepolia
 const TOKENS: { [key: string]: string } = {
     'eth': '0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7',
     'strk': '0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d'
 };
 
-// Export the tool for the agent
+/**
+ * Balance Checking Tool
+ * 
+ * This tool allows querying token balances for any address on Starknet Sepolia.
+ * Supports ETH, STRK, and any valid token contract address.
+ * 
+ * @param address - Starknet address to check
+ * @param asset - Token symbol (ETH/STRK) or contract address
+ * @returns Formatted balance string with Starkscan link
+ */
 export const checkBalanceTool = tool(async ({ address, asset }) => {
     try {
         // Validate address format
@@ -24,7 +37,7 @@ export const checkBalanceTool = tool(async ({ address, asset }) => {
             return "Error: Invalid address format";
         }
 
-        // Determine token contract address
+        // Resolve token address
         let tokenAddress: string;
         const assetLower = asset.toLowerCase();
         
@@ -36,8 +49,10 @@ export const checkBalanceTool = tool(async ({ address, asset }) => {
             return "Error: Invalid asset. Please use 'ETH', 'STRK' or a valid token contract address";
         }
 
+        // Prepare contract calls
         const accountContract = toBigInt(address).toString();
 
+        // Get token balance
         const balanceCall: Call = {
             contractAddress: tokenAddress,
             entrypoint: 'balanceOf',
@@ -45,6 +60,7 @@ export const checkBalanceTool = tool(async ({ address, asset }) => {
         }
         const balanceResponse = await provider.callContract(balanceCall);
 
+        // Get token decimals
         const decimalCall: Call = {
             contractAddress: tokenAddress,
             entrypoint: 'decimals',
@@ -52,10 +68,11 @@ export const checkBalanceTool = tool(async ({ address, asset }) => {
         }
         const decimalResponse = await provider.callContract(decimalCall);
 
+        // Calculate human-readable balance
         const decimals = parseInt(decimalResponse[0], 16);
         const balance = parseInt(balanceResponse[0], 16) * 10 ** -decimals;
         
-        // Get token symbol for display
+        // Format response
         const symbol = assetLower in TOKENS ? assetLower.toUpperCase() : 'TOKEN';
         
         return `Balance for ${address}: ${balance} ${symbol}
@@ -72,4 +89,4 @@ export const checkBalanceTool = tool(async ({ address, asset }) => {
         address: z.string().describe("The Starknet address to check"),
         asset: z.string().describe("The asset to check (ETH, STRK, or token contract address)"),
     }),
-});
+}); 

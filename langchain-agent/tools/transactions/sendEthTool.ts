@@ -1,13 +1,17 @@
 import { tool } from "@langchain/core/tools";
-import { getAccount } from "../util/wallet.js";
-import { ETH_ADDRESS } from "../constants.js";
+import { getAccount } from "../../util/wallet.js";
+import { ETH_ADDRESS } from "../../constants.js";
 import { z } from "zod";
 
-// Tool to send ETH transactions on Starknet Sepolia testnet
-// Takes recipient address and ETH amount as input
-// Prompts user for confirmation before sending
-// Returns transaction hash and Starkscan link on success
-// Handles errors and returns error messages on failure
+/**
+ * ETH Transfer Tool
+ * 
+ * Enables sending ETH transactions on Starknet Sepolia testnet.
+ * Features:
+ * - Automatic account detection
+ * - Amount conversion to wei
+ * - Transaction tracking via Starkscan
+ */
 export const sendEthTool = tool(
     async ({ recipientAddress, amountInEth }, options) => {
       try {
@@ -23,7 +27,7 @@ export const sendEthTool = tool(
           Math.floor(parseFloat(amountInEth) * 1e18)
         ).toString();
   
-        // ETH transfer call
+        // Execute ETH transfer
         const result = await account.execute({
           contractAddress: ETH_ADDRESS,
           entrypoint: "transfer",
@@ -47,4 +51,4 @@ export const sendEthTool = tool(
         amountInEth: z.string().describe("The amount of ETH to send"),
       }),
     }
-  );
+); 

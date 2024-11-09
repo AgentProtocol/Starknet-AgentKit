@@ -1,13 +1,18 @@
 import { tool } from "@langchain/core/tools";
-import { STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from "../constants.js";
-import { readFromStorage, saveToStorage } from "../util/storage.js";
-import { deployAccount } from "../util/wallet.js";
+import { STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from "../../constants.js";
+import { readFromStorage, saveToStorage } from "../../util/storage.js";
+import { deployAccount } from "../../util/wallet.js";
 
-// Tool to deploy a previously generated Starknet account
-// Requires the account to be funded first
-// Uses private key from storage to deploy the account contract
-// Saves the deployed account credentials to storage
-// Returns the deployed account address
+/**
+ * Account Deployment Tool
+ * 
+ * Deploys a previously generated Starknet account.
+ * Requirements:
+ * 1. Account must be generated first
+ * 2. Account must be funded before deployment
+ * 
+ * This is the final step in account creation workflow.
+ */
 export const deployStarknetAccountTool = tool(async ({ }, options) => {
   if (STARKNET_ACCOUNT_ADDRESS && STARKNET_PRIVATE_KEY) {
     return 'The account is set in the env and cannot be changed.'
@@ -27,4 +32,4 @@ export const deployStarknetAccountTool = tool(async ({ }, options) => {
   description: `Deploys the Starknet account / wallet.
     If wallet already exists, it will overwrite it.
     This is the last step in account creation.`
-})
+}); 

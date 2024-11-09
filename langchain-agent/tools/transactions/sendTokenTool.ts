@@ -1,9 +1,18 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import { ETH_ADDRESS, STRK_ADDRESS } from '../constants.js';
-import { getAccount } from "../util/wallet.js";
+import { ETH_ADDRESS, STRK_ADDRESS } from '../../constants.js';
+import { getAccount } from "../../util/wallet.js";
 
-
+/**
+ * Token Transfer Tool
+ * 
+ * Enables sending any ERC20 token on Starknet Sepolia testnet.
+ * Features:
+ * - Support for ETH and STRK tokens
+ * - Custom token address support
+ * - Amount conversion to wei
+ * - Transaction tracking via Starkscan
+ */
 export const sendTokenTool = tool(async ({ token, recipientAddress, amount }, options) => {
   try {
     const chatId = options.metadata.thread_id;
@@ -23,7 +32,7 @@ export const sendTokenTool = tool(async ({ token, recipientAddress, amount }, op
     // Convert amount to wei (amount * 10^18)
     const amountInWei = (BigInt(Math.floor(parseFloat(amount) * 1e18))).toString();
 
-    // Token transfer call
+    // Execute token transfer
     const result = await account.execute({
       contractAddress: tokenAddress,
       entrypoint: 'transfer',
