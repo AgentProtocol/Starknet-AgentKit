@@ -36,5 +36,3 @@ const getArticlesFromRSSFeed = async (feedUrl: string) => {
   });
   return data;
 }
-
-export const revalidate = 0;

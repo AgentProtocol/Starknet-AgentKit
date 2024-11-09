@@ -1,17 +1,17 @@
+import { tool } from "@langchain/core/tools";
+import { getAccount } from "../util/wallet";
+
 //! DRAFT
 //! needs factory contract
-
 // Function to compile and deploy a new ERC-20 token
-const deployTokenTool = tool(async ({ tokenName, tokenSymbol, initialSupply }) => {
+const deployTokenTool = tool(async ({ tokenName, tokenSymbol, initialSupply }, options) => {
     try {
-      const accountAddress = process.env.STARKNET_ACCOUNT_ADDRESS;
-      const privateKey = process.env.STARKNET_PRIVATE_KEY;
-  
-      if (!accountAddress || !privateKey) {
-        return "Error: Missing account credentials in environment variables";
+      const chatId = options.metadata.thread_id;
+      const account = await getAccount(chatId);
+
+      if (!account) {
+        return "Account does not exist, you need to create one first.";
       }
-  
-      const account = new Account(balanceProvider, accountAddress, privateKey);
   
       // Compile the Cairo contract
       await execAsync('cairo-compile src/erc20_contract.cairo --output compiled_erc20.json');

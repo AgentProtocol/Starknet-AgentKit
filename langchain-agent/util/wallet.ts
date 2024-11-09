@@ -1,4 +1,4 @@
-import { Account, constants, ec, json, stark, RpcProvider, hash, CallData } from 'starknet';
+import { Account, ec, stark, RpcProvider, hash, CallData } from 'starknet';
 import { RPC_URL, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from '../constants.js';
 import { readFromStorage } from './storage.js';
 // connect provider (Mainnet or Sepolia)

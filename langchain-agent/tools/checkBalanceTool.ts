@@ -2,7 +2,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import { Call, RpcProvider } from 'starknet';
 import { toBigInt } from 'ethers';
-import { RPC_URL } from "./constants.js";
+import { RPC_URL } from "../constants.js";
 
 // Create provider
 export const provider = new RpcProvider({ 

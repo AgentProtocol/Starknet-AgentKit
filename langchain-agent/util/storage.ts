@@ -1,5 +1,5 @@
-import storage from 'node-persist'
-import crypto from 'crypto';
+import { randomBytes, createCipheriv, createDecipheriv } from 'crypto';
+import storage from 'node-persist';
 
 const STORAGE_ENCRYPTION_KEY = process.env.STORAGE_ENCRYPTION_KEY || 'dK9x#mP2$vL7nQ4@jR5tY8*wC3hF6bN9'; // Should be 32 bytes
 const IV_LENGTH = 16; // For AES, this is always 16
@@ -17,8 +17,8 @@ const IV_LENGTH = 16; // For AES, this is always 16
 })();
 
 function encrypt(text: string): string {
-    const iv = crypto.randomBytes(IV_LENGTH);
-    const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(STORAGE_ENCRYPTION_KEY), iv);
+    const iv = randomBytes(IV_LENGTH);
+    const cipher = createCipheriv('aes-256-cbc', Buffer.from(STORAGE_ENCRYPTION_KEY), iv);
     let encrypted = cipher.update(text);
     encrypted = Buffer.concat([encrypted, cipher.final()]);
     return iv.toString('hex') + ':' + encrypted.toString('hex');
@@ -28,7 +28,7 @@ function decrypt(text: string): string {
     const textParts = text.split(':');
     const iv = Buffer.from(textParts[0], 'hex');
     const encryptedText = Buffer.from(textParts[1], 'hex');
-    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(STORAGE_ENCRYPTION_KEY), iv);
+    const decipher = createDecipheriv('aes-256-cbc', Buffer.from(STORAGE_ENCRYPTION_KEY), iv);
     let decrypted = decipher.update(encryptedText);
     decrypted = Buffer.concat([decrypted, decipher.final()]);
     return decrypted.toString();
