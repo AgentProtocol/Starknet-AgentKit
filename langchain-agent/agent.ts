@@ -7,7 +7,6 @@ import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { BOT_TOKEN } from "./constants.js";
 import { ChatOpenAI } from "@langchain/openai";
 import { Telegraf } from "telegraf";
-import { message } from "./tg_bot/filters.js";
 import * as readline from "readline";
 
 // Import tools
@@ -21,6 +20,7 @@ import {
   checkBalanceTool,
   sendTokenTool
 } from "./tools/index.js";
+import { message } from "telegraf/filters";
 
 /**
  * AGENT CONFIGURATION
